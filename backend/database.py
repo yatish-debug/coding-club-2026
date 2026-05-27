@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Dual-mode DB URL config (PostgreSQL with SQLite fallback)
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:devil@localhost:5432/gfgcoe_club_db")
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:devil@127.0.0.1:5432/gfgcoe_club_db")
 
 is_sqlite = DATABASE_URL.startswith("sqlite")
 

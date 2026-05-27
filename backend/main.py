@@ -33,8 +33,8 @@ app.add_middleware(
 )
 
 @app.get("/")
-def root():
-    return {"message": "GFGCOE Coding Club API Running"}
+async def health():
+    return {"status": "ok"}
 
 # --- AUTHENTICATION ENDPOINTS ---
 
