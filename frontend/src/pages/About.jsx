@@ -38,10 +38,10 @@ export default function About() {
             About <span className="text-emerald-400">GFGCOE Coding Club</span>
           </h1>
           <p className="text-slate-400 leading-relaxed">
-            Established in 2023, the GeeksforGeeks Student Chapter of GFG College of Engineering (GFGCOE) was founded with a singular aim: to bridge the gap between academic theory and active software industry requirements. 
+            Established in 2025, the Coding Club of Godavari Foundations Godavari College Of Engineering (GFGCOE), Jalgaon was founded with a singular aim: to bridge the gap between academic theory and active software industry requirements. 
           </p>
           <p className="text-slate-400 leading-relaxed">
-            What started as a modest group of 15 computer science students holding DSA sessions has blossomed into Pune's premier programming cohort. We connect software engineers, web architects, algorithmic puzzle solvers, and system designers into a cohesive unit that builds beautiful open-source software and represents our college in national-level contests.
+            What started as a modest group of 15 computer science students holding DSA sessions has blossomed into Godavari College of Engineering's premier programming cohort. We connect software engineers, web architects, algorithmic puzzle solvers, and system designers into a cohesive unit that builds beautiful open-source software and represents our college in national-level contests.
           </p>
         </div>
 

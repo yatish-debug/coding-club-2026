@@ -102,9 +102,9 @@ export default function Footer() {
               </li>
               <li>
                 <p className="leading-relaxed">
-                  GFGCOE Tech Campus,<br />
-                  Academic Block B, Room 304,<br />
-                  Pune, Maharashtra - 411001
+                  P-51, Dr. Ulhas Patil Nagar, M-Sector,<br />
+                  Additional MIDC, Bhusawal Road,<br />
+                  Jalgaon, Maharashtra 425003
                 </p>
               </li>
             </ul>
