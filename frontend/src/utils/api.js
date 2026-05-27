@@ -24,6 +24,19 @@ api.interceptors.request.use(
   }
 );
 
+// Response interceptor to handle session expiration (401 errors)
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response && error.response.status === 401) {
+      localStorage.removeItem('token');
+      // Redirect to login page to allow re-authentication
+      window.location.href = '/login';
+    }
+    return Promise.reject(error);
+  }
+);
+
 // --- AUTHENTICATION API ---
 export const loginUser = async (username, password) => {
   const params = new URLSearchParams();
