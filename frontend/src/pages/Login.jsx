@@ -374,11 +374,7 @@ export default function Login({ onLoginSuccess }) {
             )}
           </div>
         )}
-      </div>
-
-      <div className="p-4 bg-slate-900/40 rounded-2xl border border-slate-800/40 text-center text-[10px] text-slate-500 font-mono leading-relaxed">
-        <span className="text-slate-400 font-semibold uppercase">Quick Access:</span> Log in with username <code className="text-emerald-400 bg-slate-900 px-1 py-0.5 rounded border border-slate-800">admin</code> and password <code className="text-emerald-400 bg-slate-900 px-1 py-0.5 rounded border border-slate-800">admin123</code> to test club administration configurations.
-      </div>
+      </div>      
     </div>
   );
 }
