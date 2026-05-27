@@ -32,6 +32,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/")
+def root():
+    return {"message": "GFGCOE Coding Club API Running"}
+
 # --- AUTHENTICATION ENDPOINTS ---
 
 @app.post("/api/token", response_model=schemas.Token)
