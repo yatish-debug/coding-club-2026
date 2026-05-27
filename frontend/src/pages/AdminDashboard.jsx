@@ -40,6 +40,7 @@ const parseMarkdown = (md) => {
 
 export default function AdminDashboard() {
   const [userProfile, setUserProfile] = useState(null);
+  const [selectedIds, setSelectedIds] = useState([]);
   const [activeTab, setActiveTab] = useState('overview'); // Default tab
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -93,6 +94,7 @@ export default function AdminDashboard() {
   const [earnedPoints, setEarnedPoints] = useState(0);
 
   useEffect(() => {
+    setSelectedIds([]);
     fetchProfileAndData();
   }, [activeTab]);
 
@@ -210,6 +212,40 @@ export default function AdminDashboard() {
     } catch (err) {
       console.error(err);
       alert('Deletion failure. Access token might be expired.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) return;
+    if (!window.confirm(`Are you absolutely sure you want to delete the ${selectedIds.length} selected records? This action is permanent.`)) return;
+    setLoading(true);
+    try {
+      if (activeTab === 'events') {
+        await Promise.all(selectedIds.map(id => deleteEvent(id)));
+      } else if (activeTab === 'projects') {
+        await Promise.all(selectedIds.map(id => deleteProject(id)));
+      } else if (activeTab === 'committee') {
+        await Promise.all(selectedIds.map(id => deleteCommitteeMember(id)));
+      } else if (activeTab === 'resources') {
+        await Promise.all(selectedIds.map(id => deleteResource(id)));
+      } else if (activeTab === 'users') {
+        const validUserIds = selectedIds.filter(id => {
+          const u = usersList.find(user => user.id === id);
+          return u && u.username !== 'admin';
+        });
+        if (validUserIds.length > 0) {
+          await Promise.all(validUserIds.map(id => deleteUser(id)));
+        }
+      } else if (activeTab === 'announcements') {
+        await Promise.all(selectedIds.map(id => deleteAnnouncement(id)));
+      }
+      setSelectedIds([]);
+      await fetchProfileAndData();
+    } catch (err) {
+      console.error(err);
+      alert('Bulk deletion completed with some errors. Please refresh and try again.');
     } finally {
       setLoading(false);
     }
@@ -642,6 +678,20 @@ export default function AdminDashboard() {
         <table className="w-full min-w-[700px] border-collapse">
           <thead>
             <tr className="border-b border-slate-900 bg-slate-900/30 text-slate-400 text-xs font-mono tracking-wider uppercase">
+              <th className="px-6 py-4 w-12 text-center">
+                <input 
+                  type="checkbox" 
+                  checked={events.length > 0 && selectedIds.length === events.length}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setSelectedIds(events.map(ev => ev.id));
+                    } else {
+                      setSelectedIds([]);
+                    }
+                  }}
+                  className="rounded bg-slate-950 border-slate-800 text-emerald-500 focus:ring-emerald-500/30 cursor-pointer"
+                />
+              </th>
               <th className="px-6 py-4 font-semibold">Title</th>
               <th className="px-6 py-4 font-semibold">Category</th>
               <th className="px-6 py-4 font-semibold">Date & Time</th>
@@ -652,6 +702,20 @@ export default function AdminDashboard() {
           <tbody className="divide-y divide-slate-900 text-sm">
             {events.map((ev) => (
               <tr key={ev.id} className="hover:bg-slate-900/10 transition-colors">
+                <td className="px-6 py-4 text-center">
+                  <input 
+                    type="checkbox" 
+                    checked={selectedIds.includes(ev.id)}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedIds([...selectedIds, ev.id]);
+                      } else {
+                        setSelectedIds(selectedIds.filter(id => id !== ev.id));
+                      }
+                    }}
+                    className="rounded bg-slate-950 border-slate-800 text-emerald-500 focus:ring-emerald-500/30 cursor-pointer"
+                  />
+                </td>
                 <td className="px-6 py-4 font-semibold text-slate-200">{ev.title}</td>
                 <td className="px-6 py-4">
                   <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
@@ -694,6 +758,20 @@ export default function AdminDashboard() {
         <table className="w-full min-w-[700px] border-collapse">
           <thead>
             <tr className="border-b border-slate-900 bg-slate-900/30 text-slate-400 text-xs font-mono tracking-wider uppercase">
+              <th className="px-6 py-4 w-12 text-center">
+                <input 
+                  type="checkbox" 
+                  checked={projects.length > 0 && selectedIds.length === projects.length}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setSelectedIds(projects.map(proj => proj.id));
+                    } else {
+                      setSelectedIds([]);
+                    }
+                  }}
+                  className="rounded bg-slate-950 border-slate-800 text-emerald-500 focus:ring-emerald-500/30 cursor-pointer"
+                />
+              </th>
               <th className="px-6 py-4 font-semibold">Title</th>
               <th className="px-6 py-4 font-semibold">Tech Stack</th>
               <th className="px-6 py-4 font-semibold">Repository</th>
@@ -704,6 +782,20 @@ export default function AdminDashboard() {
           <tbody className="divide-y divide-slate-900 text-sm">
             {projects.map((proj) => (
               <tr key={proj.id} className="hover:bg-slate-900/10 transition-colors">
+                <td className="px-6 py-4 text-center">
+                  <input 
+                    type="checkbox" 
+                    checked={selectedIds.includes(proj.id)}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedIds([...selectedIds, proj.id]);
+                      } else {
+                        setSelectedIds(selectedIds.filter(id => id !== proj.id));
+                      }
+                    }}
+                    className="rounded bg-slate-950 border-slate-800 text-emerald-500 focus:ring-emerald-500/30 cursor-pointer"
+                  />
+                </td>
                 <td className="px-6 py-4 font-semibold text-slate-200">{proj.title}</td>
                 <td className="px-6 py-4 text-xs font-mono text-slate-400">{proj.tech_stack}</td>
                 <td className="px-6 py-4">
@@ -752,6 +844,20 @@ export default function AdminDashboard() {
         <table className="w-full min-w-[700px] border-collapse">
           <thead>
             <tr className="border-b border-slate-900 bg-slate-900/30 text-slate-400 text-xs font-mono tracking-wider uppercase">
+              <th className="px-6 py-4 w-12 text-center">
+                <input 
+                  type="checkbox" 
+                  checked={committee.length > 0 && selectedIds.length === committee.length}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setSelectedIds(committee.map(member => member.id));
+                    } else {
+                      setSelectedIds([]);
+                    }
+                  }}
+                  className="rounded bg-slate-950 border-slate-800 text-emerald-500 focus:ring-emerald-500/30 cursor-pointer"
+                />
+              </th>
               <th className="px-6 py-4 font-semibold">Name</th>
               <th className="px-6 py-4 font-semibold">Role</th>
               <th className="px-6 py-4 font-semibold">Academic Year</th>
@@ -761,6 +867,20 @@ export default function AdminDashboard() {
           <tbody className="divide-y divide-slate-900 text-sm">
             {committee.map((member) => (
               <tr key={member.id} className="hover:bg-slate-900/10 transition-colors">
+                <td className="px-6 py-4 text-center">
+                  <input 
+                    type="checkbox" 
+                    checked={selectedIds.includes(member.id)}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedIds([...selectedIds, member.id]);
+                      } else {
+                        setSelectedIds(selectedIds.filter(id => id !== member.id));
+                      }
+                    }}
+                    className="rounded bg-slate-950 border-slate-800 text-emerald-500 focus:ring-emerald-500/30 cursor-pointer"
+                  />
+                </td>
                 <td className="px-6 py-4 font-semibold text-slate-200">{member.name}</td>
                 <td className="px-6 py-4 text-slate-400">{member.role}</td>
                 <td className="px-6 py-4 font-mono text-xs text-slate-400">{member.year}</td>
@@ -796,6 +916,22 @@ export default function AdminDashboard() {
         <table className="w-full min-w-[700px] border-collapse">
           <thead>
             <tr className="border-b border-slate-900 bg-slate-900/30 text-slate-400 text-xs font-mono tracking-wider uppercase">
+              {userProfile?.role !== 'student' && (
+                <th className="px-6 py-4 w-12 text-center">
+                  <input 
+                    type="checkbox" 
+                    checked={resources.length > 0 && selectedIds.length === resources.length}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedIds(resources.map(res => res.id));
+                      } else {
+                        setSelectedIds([]);
+                      }
+                    }}
+                    className="rounded bg-slate-950 border-slate-800 text-emerald-500 focus:ring-emerald-500/30 cursor-pointer"
+                  />
+                </th>
+              )}
               <th className="px-6 py-4 font-semibold">Title</th>
               <th className="px-6 py-4 font-semibold">Subtype</th>
               <th className="px-6 py-4 font-semibold">Topic</th>
@@ -808,6 +944,22 @@ export default function AdminDashboard() {
           <tbody className="divide-y divide-slate-900 text-sm">
             {resources.map((res) => (
               <tr key={res.id} className="hover:bg-slate-900/10 transition-colors">
+                {userProfile?.role !== 'student' && (
+                  <td className="px-6 py-4 text-center">
+                    <input 
+                      type="checkbox" 
+                      checked={selectedIds.includes(res.id)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedIds([...selectedIds, res.id]);
+                        } else {
+                          setSelectedIds(selectedIds.filter(id => id !== res.id));
+                        }
+                      }}
+                      className="rounded bg-slate-950 border-slate-800 text-emerald-500 focus:ring-emerald-500/30 cursor-pointer"
+                    />
+                  </td>
+                )}
                 <td className="px-6 py-4 font-semibold text-slate-200">
                   <div className="flex flex-col">
                     <span>{res.title}</span>
@@ -876,6 +1028,20 @@ export default function AdminDashboard() {
         <table className="w-full min-w-[800px] border-collapse">
           <thead>
             <tr className="border-b border-slate-900 bg-slate-900/30 text-slate-400 text-xs font-mono tracking-wider uppercase">
+              <th className="px-6 py-4 w-12 text-center">
+                <input 
+                  type="checkbox" 
+                  checked={usersList.length > 0 && selectedIds.length === usersList.length}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setSelectedIds(usersList.map(u => u.id));
+                    } else {
+                      setSelectedIds([]);
+                    }
+                  }}
+                  className="rounded bg-slate-950 border-slate-800 text-emerald-500 focus:ring-emerald-500/30 cursor-pointer"
+                />
+              </th>
               <th className="px-6 py-4 font-semibold">Username</th>
               <th className="px-6 py-4 font-semibold">Email</th>
               <th className="px-6 py-4 font-semibold">Full Name</th>
@@ -887,6 +1053,21 @@ export default function AdminDashboard() {
           <tbody className="divide-y divide-slate-900 text-sm">
             {usersList.map((u) => (
               <tr key={u.id} className="hover:bg-slate-900/10 transition-colors">
+                <td className="px-6 py-4 text-center">
+                  <input 
+                    type="checkbox" 
+                    checked={selectedIds.includes(u.id)}
+                    disabled={u.username === 'admin'}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedIds([...selectedIds, u.id]);
+                      } else {
+                        setSelectedIds(selectedIds.filter(id => id !== u.id));
+                      }
+                    }}
+                    className="rounded bg-slate-950 border-slate-800 text-emerald-500 focus:ring-emerald-500/30 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                  />
+                </td>
                 <td className="px-6 py-4 font-semibold text-slate-200">{u.username}</td>
                 <td className="px-6 py-4 text-slate-400 font-mono text-xs">{u.email}</td>
                 <td className="px-6 py-4 text-slate-300">{u.full_name}</td>
@@ -952,6 +1133,22 @@ export default function AdminDashboard() {
         <table className="w-full min-w-[700px] border-collapse">
           <thead>
             <tr className="border-b border-slate-900 bg-slate-900/30 text-slate-400 text-xs font-mono tracking-wider uppercase">
+              {userProfile?.role !== 'student' && (
+                <th className="px-6 py-4 w-12 text-center">
+                  <input 
+                    type="checkbox" 
+                    checked={announcements.length > 0 && selectedIds.length === announcements.length}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedIds(announcements.map(ann => ann.id));
+                      } else {
+                        setSelectedIds([]);
+                      }
+                    }}
+                    className="rounded bg-slate-950 border-slate-800 text-emerald-500 focus:ring-emerald-500/30 cursor-pointer"
+                  />
+                </th>
+              )}
               <th className="px-6 py-4 font-semibold">Title</th>
               <th className="px-6 py-4 font-semibold">Pinned</th>
               <th className="px-6 py-4 font-semibold">Content</th>
@@ -961,6 +1158,22 @@ export default function AdminDashboard() {
           <tbody className="divide-y divide-slate-900 text-sm">
             {announcements.map((ann) => (
               <tr key={ann.id} className="hover:bg-slate-900/10 transition-colors">
+                {userProfile?.role !== 'student' && (
+                  <td className="px-6 py-4 text-center">
+                    <input 
+                      type="checkbox" 
+                      checked={selectedIds.includes(ann.id)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedIds([...selectedIds, ann.id]);
+                        } else {
+                          setSelectedIds(selectedIds.filter(id => id !== ann.id));
+                        }
+                      }}
+                      className="rounded bg-slate-950 border-slate-800 text-emerald-500 focus:ring-emerald-500/30 cursor-pointer"
+                    />
+                  </td>
+                )}
                 <td className="px-6 py-4 font-semibold text-slate-200">{ann.title}</td>
                 <td className="px-6 py-4">
                   {ann.is_pinned ? (
@@ -1528,12 +1741,22 @@ export default function AdminDashboard() {
           </div>
 
           {userProfile?.role !== 'student' && activeTab !== 'overview' && activeTab !== 'approvals' && activeTab !== 'contests' && activeTab !== 'claims' && (
-            <button
-              onClick={handleOpenAdd}
-              className="glow-btn px-5 py-2.5 rounded-xl text-xs font-mono font-bold text-slate-900 bg-emerald-400 hover:bg-emerald-300 transition-all flex items-center gap-1.5 cursor-pointer shadow-lg shadow-emerald-500/10"
-            >
-              <Plus size={16} /> ADD_NEW_{activeTab.toUpperCase().slice(0, -1)}__
-            </button>
+            <div className="flex items-center gap-3">
+              {selectedIds.length > 0 && (
+                <button
+                  onClick={handleBulkDelete}
+                  className="px-5 py-2.5 rounded-xl text-xs font-mono font-bold text-rose-450 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 transition-all flex items-center gap-1.5 cursor-pointer shadow-lg"
+                >
+                  <Trash2 size={16} /> BULK_DELETE_SELECTED_({selectedIds.length})
+                </button>
+              )}
+              <button
+                onClick={handleOpenAdd}
+                className="glow-btn px-5 py-2.5 rounded-xl text-xs font-mono font-bold text-slate-900 bg-emerald-400 hover:bg-emerald-300 transition-all flex items-center gap-1.5 cursor-pointer shadow-lg shadow-emerald-500/10"
+              >
+                <Plus size={16} /> ADD_NEW_{activeTab.toUpperCase().slice(0, -1)}__
+              </button>
+            </div>
           )}
         </div>
 
