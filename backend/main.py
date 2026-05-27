@@ -46,20 +46,29 @@ async def health():
 
 @app.post("/api/token", response_model=schemas.Token)
 def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    email_input = form_data.username.lower().strip()
+    input_str = form_data.username.lower().strip()
     
-    # Strictly validate institutional domain format
-    if not email_input.endswith("@gfgcoe.codingclub.in"):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Authentication failed. Only full institutional IDs ending with @gfgcoe.codingclub.in are allowed."
-        )
+    # Try fetching by username first (supports raw logins like 'admin')
+    user = crud.get_user_by_username(db, input_str)
+    
+    # If not found by username, try fetching by email
+    if not user:
+        if "@" not in input_str:
+            email_input = f"{input_str}@gfgcoe.codingclub.in"
+        else:
+            email_input = input_str
+            
+        if not email_input.endswith("@gfgcoe.codingclub.in"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Authentication failed. Only full institutional IDs ending with @gfgcoe.codingclub.in are allowed."
+            )
+        user = crud.get_user_by_email(db, email_input)
         
-    user = crud.get_user_by_email(db, email_input)
     if not user or not auth.verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect institutional email ID or password",
+            detail="Incorrect credentials or unapproved account.",
             headers={"WWW-Authenticate": "Bearer"},
         )
         
