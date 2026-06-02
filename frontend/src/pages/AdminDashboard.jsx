@@ -3,9 +3,9 @@ import {
   Plus, Edit2, Trash2, Calendar, Code, Users, BookOpen, AlertCircle, 
   RefreshCw, X, ShieldAlert, Key, UserCheck, Award, Terminal, 
   Megaphone, Pin, BarChart3, Lock, ShieldCheck, ChevronRight, Menu, ToggleLeft, ToggleRight,
-  User, CheckCircle2, Bookmark, FolderPlus, Download, ExternalLink, Zap
+  User, CheckCircle2, Bookmark, FolderPlus, Download, ExternalLink, Zap, Globe, Upload, Sliders
 } from 'lucide-react';
-import { 
+import api, { 
   getEvents, createEvent, updateEvent, deleteEvent,
   getProjects, createProject, updateProject, deleteProject,
   getCommittee, createCommitteeMember, updateCommitteeMember, deleteCommitteeMember,
@@ -16,7 +16,16 @@ import {
   getApprovalRequests, approveGuestRequest, rejectGuestRequest,
   getContests, createContest, updateContest, deleteContest,
   addContestQuestion, deleteContestQuestion,
-  getAdminClaims, resolvePointClaim
+  getAdminClaims, resolvePointClaim,
+  getAdminCms, updateCmsSetting,
+  getClubAchievements, createClubAchievement, updateClubAchievement, deleteClubAchievement,
+  getExecutiveAnalytics,
+  getCodingProfiles, updateMyCodingProfile, syncCodingProfiles,
+  importUsersCsv,
+  getCommitteeLeaderboard, getCommitteeLeaderboardStats, recalculateLeaderboard, 
+  resetLeaderboard, getLeaderboardSnapshots, restoreLeaderboardSnapshot, 
+  createCodingProfileAdmin, updateCodingProfileAdmin, deleteCodingProfileAdmin, 
+  syncSingleCodingProfile, toggleCodingProfileTracking
 } from '../utils/api';
 import GlowingCard from '../components/GlowingCard';
 
@@ -56,6 +65,15 @@ export default function AdminDashboard() {
   const [usersList, setUsersList] = useState([]);
   const [announcements, setAnnouncements] = useState([]);
 
+  // NEW ADMIN CMS, ACHIEVEMENTS, SYNC & ANALYTICS STATE
+  const [cmsSettings, setCmsSettings] = useState([]);
+  const [achievementsList, setAchievementsList] = useState([]);
+  const [codingProfilesList, setCodingProfilesList] = useState([]);
+  const [analyticsData, setAnalyticsData] = useState(null);
+  const [isSyncingCoding, setIsSyncingCoding] = useState(false);
+  const [editingCmsSection, setEditingCmsSection] = useState('hero');
+  const [handlesFormData, setHandlesFormData] = useState({ user_id: '', github_username: '', codeforces_username: '', leetcode_username: '', gfg_username: '', hackerrank_username: '' });
+
   // Gamification & Guest approvals lists
   const [approvalRequests, setApprovalRequests] = useState([]);
   const [contests, setContests] = useState([]);
@@ -92,6 +110,15 @@ export default function AdminDashboard() {
 
   // Points popup animation indicator
   const [earnedPoints, setEarnedPoints] = useState(0);
+
+  // New coding profile handles & snapshot management states
+  const [showHandlesModal, setShowHandlesModal] = useState(false);
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [snapshotsList, setSnapshotsList] = useState([]);
+  const [showResetLeaderboardModal, setShowResetLeaderboardModal] = useState(false);
+  const [resetLeaderboardFormData, setResetLeaderboardFormData] = useState({ snapshot_type: 'monthly', name: '' });
+  const [leaderboardStats, setLeaderboardStats] = useState(null);
+
 
   useEffect(() => {
     setSelectedIds([]);
@@ -148,6 +175,11 @@ export default function AdminDashboard() {
         const data = await getResources(); setResources(data);
       } else if (activeTab === 'users' && profile.role === 'admin') {
         const data = await getUsers(); setUsersList(data);
+        try {
+          const profs = await getCodingProfiles(); setCodingProfilesList(profs);
+        } catch (e) {
+          console.error(e);
+        }
       } else if (activeTab === 'announcements') {
         const data = await getAnnouncements(); setAnnouncements(data);
       } else if (activeTab === 'approvals' && profile.role === 'admin') {
@@ -156,6 +188,21 @@ export default function AdminDashboard() {
         const data = await getContests(); setContests(data);
       } else if (activeTab === 'claims') {
         const data = await getAdminClaims(); setClaims(data);
+      } else if (activeTab === 'cms' && profile.role === 'admin') {
+        const data = await getAdminCms(); setCmsSettings(data);
+      } else if (activeTab === 'achievements' && profile.role === 'admin') {
+        const data = await getClubAchievements(); setAchievementsList(data);
+      } else if (activeTab === 'coding-sync' && profile.role === 'admin') {
+        const data = await getCodingProfiles(); setCodingProfilesList(data);
+        const usrs = await getUsers(); setUsersList(usrs);
+        try {
+          const snaps = await getLeaderboardSnapshots(); setSnapshotsList(snaps);
+          const stats = await getCommitteeLeaderboardStats(); setLeaderboardStats(stats);
+        } catch (e) {
+          console.error("Failed to load snapshots/stats", e);
+        }
+      } else if (activeTab === 'analytics' && profile.role === 'admin') {
+        const data = await getExecutiveAnalytics(); setAnalyticsData(data);
       }
     } catch (err) {
       console.error(err);
@@ -179,6 +226,8 @@ export default function AdminDashboard() {
       setFormData({ username: '', email: '', full_name: '', role: 'student', password: '' });
     } else if (activeTab === 'announcements') {
       setFormData({ title: '', content: '', is_pinned: false });
+    } else if (activeTab === 'achievements') {
+      setFormData({ title: '', description: '', category: 'Hackathons', achieved_by: '', link: '', image_url: '', date: new Date().toISOString().slice(0, 10) });
     }
     setShowModal(true);
   };
@@ -192,6 +241,9 @@ export default function AdminDashboard() {
       setFormData({ ...item, date: localISOTime });
     } else if (activeTab === 'users') {
       setFormData({ ...item, password: '' });
+    } else if (activeTab === 'achievements') {
+      const dateObj = new Date(item.date);
+      setFormData({ ...item, date: dateObj.toISOString().slice(0, 10) });
     } else {
       setFormData({ ...item });
     }
@@ -208,6 +260,7 @@ export default function AdminDashboard() {
       else if (activeTab === 'resources') await deleteResource(id);
       else if (activeTab === 'users') await deleteUser(id);
       else if (activeTab === 'announcements') await deleteAnnouncement(id);
+      else if (activeTab === 'achievements') await deleteClubAchievement(id);
       await fetchProfileAndData();
     } catch (err) {
       console.error(err);
@@ -240,6 +293,8 @@ export default function AdminDashboard() {
         }
       } else if (activeTab === 'announcements') {
         await Promise.all(selectedIds.map(id => deleteAnnouncement(id)));
+      } else if (activeTab === 'achievements') {
+        await Promise.all(selectedIds.map(id => deleteClubAchievement(id)));
       }
       setSelectedIds([]);
       await fetchProfileAndData();
@@ -291,6 +346,226 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleExportUsers = async () => {
+    setLoading(true);
+    try {
+      const response = await api.get('/admin/users/export', { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', 'gfgcoe_coding_club_members.csv');
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode.removeChild(link);
+    } catch (err) {
+      console.error(err);
+      alert('Failed to export student CSV roster.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleImportCsv = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setLoading(true);
+    try {
+      const formDataObj = new FormData();
+      formDataObj.append('file', file);
+      const res = await importUsersCsv(formDataObj);
+      alert(`✓ Bulk CSV Import Successful!\nImported/Updated: ${res.imported} users.${res.errors.length > 0 ? `\n\nNote:\n${res.errors.join('\n')}` : ''}`);
+      await fetchProfileAndData();
+    } catch (err) {
+      console.error(err);
+      alert(err.response?.data?.detail || 'CSV Import failed. Make sure the headers match perfectly.');
+    } finally {
+      setLoading(false);
+      e.target.value = '';
+    }
+  };
+
+  const handleCmsValueChange = (key, val) => {
+    setCmsSettings(prev => prev.map(s => s.key === key ? { ...s, value: val } : s));
+  };
+
+  const handleSaveCmsSetting = async (setting) => {
+    setLoading(true);
+    try {
+      await updateCmsSetting(setting);
+      alert(`✓ CMS Setting "${setting.key}" updated successfully!`);
+    } catch (err) {
+      console.error(err);
+      alert('Failed to update CMS setting.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleTriggerSync = async () => {
+    setIsSyncingCoding(true);
+    try {
+      const res = await syncCodingProfiles();
+      alert(`✓ Coding standings evaluation completed!\nEvaluation processed on ${res.synced_count} active user accounts.`);
+      await fetchProfileAndData();
+    } catch (err) {
+      console.error(err);
+      alert('Standings evaluation pipeline failed.');
+    } finally {
+      setIsSyncingCoding(false);
+    }
+  };
+
+  // --- NEW HANDLERS FOR COMMITTEE CODING PROFILE & RESETS ---
+
+  const handleOpenManageHandles = (user) => {
+    setSelectedUser(user);
+    const existing = codingProfilesList.find(p => p.user_id === user.id);
+    if (existing) {
+      setHandlesFormData({
+        user_id: user.id,
+        github_username: existing.github_username || '',
+        codeforces_username: existing.codeforces_username || '',
+        leetcode_username: existing.leetcode_username || '',
+        gfg_username: existing.gfg_username || '',
+        hackerrank_username: existing.hackerrank_username || ''
+      });
+    } else {
+      setHandlesFormData({
+        user_id: user.id,
+        github_username: '',
+        codeforces_username: '',
+        leetcode_username: '',
+        gfg_username: '',
+        hackerrank_username: ''
+      });
+    }
+    setShowHandlesModal(true);
+  };
+
+  const handleHandlesSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      const existing = codingProfilesList.find(p => p.user_id === selectedUser.id);
+      if (existing) {
+        await updateCodingProfileAdmin(existing.id, handlesFormData);
+        alert('✓ Coding profile updated successfully!');
+      } else {
+        await createCodingProfileAdmin(handlesFormData);
+        alert('✓ Coding profile attached successfully!');
+      }
+      setShowHandlesModal(false);
+      await fetchProfileAndData();
+    } catch (err) {
+      console.error(err);
+      alert(err.response?.data?.detail || 'Failed to save coding profile.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleHandlesRemove = async () => {
+    const existing = codingProfilesList.find(p => p.user_id === selectedUser.id);
+    if (!existing) return;
+    if (!window.confirm("Are you absolutely sure you want to remove this user's coding profile? This will wipe their scores.")) return;
+    setLoading(true);
+    try {
+      await deleteCodingProfileAdmin(existing.id);
+      alert('✓ Coding profile removed.');
+      setShowHandlesModal(false);
+      await fetchProfileAndData();
+    } catch (err) {
+      console.error(err);
+      alert('Failed to remove coding profile.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleHandlesSync = async () => {
+    const existing = codingProfilesList.find(p => p.user_id === selectedUser.id);
+    if (!existing) return;
+    setLoading(true);
+    try {
+      await syncSingleCodingProfile(existing.id);
+      alert('✓ Coding profile metrics synchronized successfully!');
+      setShowHandlesModal(false);
+      await fetchProfileAndData();
+    } catch (err) {
+      console.error(err);
+      alert('Failed to synchronize coding profile.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleHandlesToggleTracking = async () => {
+    const existing = codingProfilesList.find(p => p.user_id === selectedUser.id);
+    if (!existing) return;
+    setLoading(true);
+    try {
+      const res = await toggleCodingProfileTracking(existing.id);
+      alert(`✓ Coding tracking is now ${res.is_tracking_enabled ? 'ENABLED' : 'DISABLED'}.`);
+      setShowHandlesModal(false);
+      await fetchProfileAndData();
+    } catch (err) {
+      console.error(err);
+      alert('Failed to toggle coding tracking.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRecalculateStandings = async () => {
+    setLoading(true);
+    try {
+      const res = await recalculateLeaderboard();
+      alert(`✓ Standing recalculations complete! Processed ${res.synced_count} active tracked profiles.`);
+      await fetchProfileAndData();
+    } catch (err) {
+      console.error(err);
+      alert('Failed to recalculate standings.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResetLeaderboardSubmit = async (e) => {
+    e.preventDefault();
+    if (!resetLeaderboardFormData.name.trim()) {
+      alert('Please enter a valid snapshot label.');
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await resetLeaderboard(resetLeaderboardFormData);
+      alert(`✓ Leaderboard reset and snapshotted successfully!\nSnapshot Label: ${res.snapshot_name}`);
+      setShowResetLeaderboardModal(false);
+      setResetLeaderboardFormData({ snapshot_type: 'monthly', name: '' });
+      await fetchProfileAndData();
+    } catch (err) {
+      console.error(err);
+      alert('Failed to reset leaderboard.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRestoreSnapshot = async (snapId) => {
+    if (!window.confirm('WARNING: Restoring a snapshot will overwrite all active standings scores with the archived snapshot data. Do you want to proceed?')) return;
+    setLoading(true);
+    try {
+      await restoreLeaderboardSnapshot(snapId);
+      alert('✓ Previous leaderboard standing snapshot restored successfully!');
+      await fetchProfileAndData();
+    } catch (err) {
+      console.error(err);
+      alert('Failed to restore snapshot.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -311,6 +586,10 @@ export default function AdminDashboard() {
       } else if (activeTab === 'announcements') {
         if (editingId) await updateAnnouncement(editingId, formData);
         else await createAnnouncement(formData);
+      } else if (activeTab === 'achievements') {
+        const payload = { ...formData, date: new Date(formData.date).toISOString() };
+        if (editingId) await updateClubAchievement(editingId, payload);
+        else await createClubAchievement(payload);
       } else if (activeTab === 'users') {
         if (!formData.email.toLowerCase().endsWith('@gfgcoe.codingclub.in')) {
           alert('Validation Error: Institutional IDs ending with @gfgcoe.codingclub.in are strictly required.');
@@ -608,7 +887,586 @@ export default function AdminDashboard() {
       </div>
     </div>
   );
+  // ==========================================
+  //     NEW ADMINISTRATIVE MODULE RENDERS
+  // ==========================================
 
+  const renderCmsEditor = () => {
+    const categories = {
+      hero: { label: 'Hero Block Settings', desc: 'Main branding titles and descriptions visible on the front landing page.' },
+      about: { label: 'About & Brand Story', desc: 'Faculty statements, core team background, and institutional mission/vision cards.' },
+      sponsors: { label: 'Partners & Sponsors', desc: 'Manage GeeksforGeeks club sponsors logo names (comma-separated).' },
+      statistics: { label: 'Telemetry Statistics', desc: 'Update display counts for student cohort sizes, projects, events and competitions.' },
+      contact: { label: 'Institutional Contact', desc: 'Institutional helpline phone numbers and email domains.' },
+      footer: { label: 'Footer Brand Texts', desc: 'Branding copyrights text shown at the base of the portal pages.' }
+    };
+
+    return (
+      <div className="space-y-8 animate-fade-in text-left">
+        <div className="flex flex-wrap gap-2 border-b border-slate-900 pb-3">
+          {Object.keys(categories).map((cat) => (
+            <button
+              key={cat}
+              onClick={() => setEditingCmsSection(cat)}
+              className={`px-4 py-2 rounded-xl text-xs font-mono font-bold transition-all cursor-pointer ${
+                editingCmsSection === cat 
+                  ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 animate-pulse' 
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
+              }`}
+            >
+              {categories[cat].label}
+            </button>
+          ))}
+        </div>
+
+        <div className="glass-panel p-6 sm:p-8 rounded-3xl border border-slate-800/40 relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-32 h-32 rounded-full bg-emerald-500/5 blur-[35px] pointer-events-none"></div>
+          <div className="mb-6">
+            <h4 className="text-base font-extrabold text-slate-200 uppercase tracking-wide font-mono">// {categories[editingCmsSection].label}</h4>
+            <p className="text-xs text-slate-400 mt-1">{categories[editingCmsSection].desc}</p>
+          </div>
+
+          <div className="space-y-6">
+            {cmsSettings
+              .filter(s => s.category === editingCmsSection)
+              .map((setting) => {
+                const displayName = setting.key.replace('stat_', 'Stat: ').replace('about_', 'About: ').replace('hero_', 'Hero: ').replace('footer_', 'Footer: ').replace('contact_', 'Contact: ').replace('_', ' ').toUpperCase();
+                return (
+                  <div key={setting.key} className="space-y-2 p-4 bg-slate-950/40 border border-slate-900/60 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="space-y-1 flex-1 text-left">
+                      <span className="text-[10px] font-mono font-bold text-slate-500">{setting.key}</span>
+                      <h5 className="text-xs font-bold text-slate-300">{displayName}</h5>
+                      {setting.value.length > 80 ? (
+                        <textarea
+                          rows={3}
+                          value={setting.value}
+                          onChange={(e) => handleCmsValueChange(setting.key, e.target.value)}
+                          className="w-full mt-2 px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-slate-100 text-sm focus:outline-none focus:border-emerald-500"
+                        />
+                      ) : (
+                        <input
+                          type="text"
+                          value={setting.value}
+                          onChange={(e) => handleCmsValueChange(setting.key, e.target.value)}
+                          className="w-full mt-2 px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-slate-100 text-sm focus:outline-none focus:border-emerald-500"
+                        />
+                      )}
+                    </div>
+                    <button
+                      onClick={() => handleSaveCmsSetting(setting)}
+                      disabled={loading}
+                      className="glow-btn shrink-0 md:self-end px-5 py-2.5 bg-emerald-400 hover:bg-emerald-300 text-slate-900 rounded-xl text-xs font-mono font-bold transition-all cursor-pointer"
+                    >
+                      SAVE_SETTING_
+                    </button>
+                  </div>
+                );
+              })}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderAchievementsLedger = () => (
+    <div className="glass-panel rounded-3xl border border-slate-800/40 overflow-hidden text-left animate-fade-in">
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[700px] border-collapse">
+          <thead>
+            <tr className="border-b border-slate-900 bg-slate-900/30 text-slate-400 text-xs font-mono tracking-wider uppercase">
+              <th className="px-6 py-4 w-12 text-center">
+                <input 
+                  type="checkbox" 
+                  checked={achievementsList.length > 0 && selectedIds.length === achievementsList.length}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setSelectedIds(achievementsList.map(ach => ach.id));
+                    } else {
+                      setSelectedIds([]);
+                    }
+                  }}
+                  className="rounded bg-slate-950 border-slate-800 text-emerald-500 focus:ring-emerald-500/30 cursor-pointer"
+                />
+              </th>
+              <th className="px-6 py-4 font-semibold">Title</th>
+              <th className="px-6 py-4 font-semibold">Category</th>
+              <th className="px-6 py-4 font-semibold">Achieved By</th>
+              <th className="px-6 py-4 font-semibold">Date</th>
+              <th className="px-6 py-4 font-semibold text-center">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-900 text-sm">
+            {achievementsList.map((ach) => (
+              <tr key={ach.id} className="hover:bg-slate-900/10 transition-colors">
+                <td className="px-6 py-4 text-center">
+                  <input 
+                    type="checkbox" 
+                    checked={selectedIds.includes(ach.id)}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedIds([...selectedIds, ach.id]);
+                      } else {
+                        setSelectedIds(selectedIds.filter(id => id !== ach.id));
+                      }
+                    }}
+                    className="rounded bg-slate-950 border-slate-800 text-emerald-500 focus:ring-emerald-500/30 cursor-pointer"
+                  />
+                </td>
+                <td className="px-6 py-4">
+                  <div className="flex flex-col">
+                    <span className="font-semibold text-slate-200">{ach.title}</span>
+                    <span className="text-[10px] text-slate-500 truncate max-w-xs">{ach.description}</span>
+                  </div>
+                </td>
+                <td className="px-6 py-4">
+                  <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase bg-indigo-500/10 border border-indigo-500/20 text-indigo-400">
+                    {ach.category}
+                  </span>
+                </td>
+                <td className="px-6 py-4 text-slate-300 font-mono text-xs">{ach.achieved_by}</td>
+                <td className="px-6 py-4 text-slate-450 font-mono text-xs">
+                  {new Date(ach.date).toLocaleDateString()}
+                </td>
+                <td className="px-6 py-4">
+                  <div className="flex items-center justify-center gap-3">
+                    <button
+                      onClick={() => handleOpenEdit(ach)}
+                      className="p-1.5 hover:bg-slate-800/60 border border-transparent hover:border-slate-800 rounded-lg text-slate-400 hover:text-emerald-400 transition-colors cursor-pointer"
+                      title="Edit Achievement"
+                    >
+                      <Edit2 size={14} />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(ach.id)}
+                      className="p-1.5 hover:bg-slate-800/60 border border-transparent hover:border-slate-800 rounded-lg text-slate-400 hover:text-rose-400 transition-colors cursor-pointer"
+                      title="Delete Achievement"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+
+  const renderCodingSyncManager = () => {
+    const stats = leaderboardStats || {
+      committee_members_tracked: 0,
+      top_coder: 'None',
+      total_coding_profiles: 0,
+      active_coding_members: 0,
+      monthly_coding_champion: 'None'
+    };
+
+    return (
+      <div className="space-y-8 animate-fade-in text-left">
+        
+        {/* Global Standings Controls Banner */}
+        <GlowingCard hoverGlow="emerald" className="p-8 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
+          <div className="space-y-2 text-left">
+            <span className="text-xs font-mono font-bold tracking-widest text-emerald-400 uppercase">
+              // COMMITTEE_STANDINGS_ENGINE
+            </span>
+            <h3 className="text-2xl font-extrabold text-slate-100 font-sans tracking-tight">
+              Committee coding Standings engine
+            </h3>
+            <p className="text-sm text-slate-400 max-w-xl leading-relaxed">
+              Synchronize coding scores, contest points, repository commits and solved DSA problems from GitHub, LeetCode, Codeforces, HackerRank, and GeeksforGeeks.
+            </p>
+          </div>
+          
+          <div className="flex flex-wrap gap-3 w-full lg:w-auto shrink-0 justify-start lg:justify-end">
+            <button
+              onClick={handleRecalculateStandings}
+              disabled={loading}
+              className="px-5 py-3 bg-slate-900 hover:bg-slate-850 border border-slate-800 text-emerald-450 hover:text-emerald-400 rounded-xl font-mono font-bold text-xs cursor-pointer shadow-lg transition-colors"
+            >
+              RECALCULATE_STANDINGS_
+            </button>
+            <button
+              onClick={() => setShowResetLeaderboardModal(true)}
+              disabled={loading}
+              className="px-5 py-3 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 text-rose-400 rounded-xl font-mono font-bold text-xs cursor-pointer shadow-lg transition-all"
+            >
+              RESET_LEADERBOARD_
+            </button>
+            <button
+              onClick={handleTriggerSync}
+              disabled={isSyncingCoding || loading}
+              className="glow-btn flex items-center gap-2 px-6 py-3 bg-emerald-400 hover:bg-emerald-300 text-slate-900 rounded-xl font-mono font-bold text-xs cursor-pointer shadow-lg shadow-emerald-500/10"
+            >
+              {isSyncingCoding ? (
+                <RefreshCw className="animate-spin" size={16} />
+              ) : (
+                <Zap size={16} />
+              )}
+              {isSyncingCoding ? 'SYNCHRONIZING_...' : 'RUN_GLOBAL_SYNC_'}
+            </button>
+          </div>
+        </GlowingCard>
+
+        {/* Database-Driven Statistics widgets */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
+          <div className="p-5 bg-slate-950/40 border border-slate-900 rounded-2xl flex flex-col justify-between min-h-[100px] text-left">
+            <span className="text-[10px] font-mono text-slate-500 block uppercase">Tracked Members</span>
+            <div className="text-2xl font-extrabold text-slate-200 mt-2">{stats.committee_members_tracked} Members</div>
+            <p className="text-[9px] font-mono text-slate-500 mt-1 uppercase">Track status active</p>
+          </div>
+          
+          <div className="p-5 bg-slate-950/40 border border-slate-900 rounded-2xl flex flex-col justify-between min-h-[100px] text-left">
+            <span className="text-[10px] font-mono text-slate-500 block uppercase">Top Coder</span>
+            <div className="text-lg font-bold text-emerald-400 mt-2 truncate">{stats.top_coder}</div>
+            <p className="text-[9px] font-mono text-slate-500 mt-1 uppercase">Highest Overall Score</p>
+          </div>
+
+          <div className="p-5 bg-slate-950/40 border border-slate-900 rounded-2xl flex flex-col justify-between min-h-[100px] text-left">
+            <span className="text-[10px] font-mono text-slate-500 block uppercase">Total coding Profiles</span>
+            <div className="text-2xl font-extrabold text-slate-200 mt-2">{stats.total_coding_profiles} Profiles</div>
+            <p className="text-[9px] font-mono text-slate-500 mt-1 uppercase">Database attached count</p>
+          </div>
+
+          <div className="p-5 bg-slate-950/40 border border-slate-900 rounded-2xl flex flex-col justify-between min-h-[100px] text-left">
+            <span className="text-[10px] font-mono text-slate-500 block uppercase">Active coding Members</span>
+            <div className="text-2xl font-extrabold text-slate-200 mt-2">{stats.active_coding_members} Active</div>
+            <p className="text-[9px] font-mono text-slate-500 mt-1 uppercase">Score metrics &gt; 0</p>
+          </div>
+
+          <div className="p-5 bg-slate-950/40 border border-slate-900 rounded-2xl flex flex-col justify-between min-h-[100px] text-left">
+            <span className="text-[10px] font-mono text-slate-500 block uppercase">Monthly Champion</span>
+            <div className="text-base font-bold text-indigo-400 mt-2 truncate">{stats.monthly_coding_champion}</div>
+            <p className="text-[9px] font-mono text-slate-500 mt-1 uppercase">Latest monthly snap</p>
+          </div>
+        </div>
+
+        {/* Snapshots & History snap archives */}
+        {snapshotsList.length > 0 && (
+          <div className="glass-panel p-6 rounded-3xl border border-slate-800/40 text-left space-y-4">
+            <div className="flex justify-between items-center">
+              <span className="text-xs font-mono text-slate-500 uppercase tracking-widest font-bold block">// Historical snapshot archives</span>
+              <span className="text-[10px] font-mono text-slate-650">Non-destructive ledger</span>
+            </div>
+            
+            <div className="overflow-x-auto border border-slate-900/60 rounded-xl">
+              <table className="w-full min-w-[600px] border-collapse text-sm">
+                <thead>
+                  <tr className="border-b border-slate-900 bg-slate-900/20 text-slate-500 text-[10px] font-mono tracking-wider uppercase text-left">
+                    <th className="px-4 py-3">Snapshot Name</th>
+                    <th className="px-4 py-3">Resets Category</th>
+                    <th className="px-4 py-3">Archive Date</th>
+                    <th className="px-4 py-3 text-center">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-900/40 text-xs font-mono">
+                  {snapshotsList.map((snap) => (
+                    <tr key={snap.id} className="hover:bg-slate-950/20 transition-colors">
+                      <td className="px-4 py-3 text-slate-200 font-bold">{snap.name}</td>
+                      <td className="px-4 py-3 text-slate-400">
+                        <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 uppercase">
+                          {snap.snapshot_type}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-slate-500">{new Date(snap.snapshot_date).toLocaleString()}</td>
+                      <td className="px-4 py-3 text-center">
+                        <button
+                          onClick={() => handleRestoreSnapshot(snap.id)}
+                          className="px-3 py-1 bg-slate-900 hover:bg-emerald-500/10 border border-slate-800 hover:border-emerald-500/25 text-emerald-450 hover:text-emerald-400 rounded-lg text-[10px] font-bold transition-all cursor-pointer"
+                        >
+                          RESTORE_SNAP_
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Committee Members coding profiles table */}
+        <div className="glass-panel rounded-3xl border border-slate-800/40 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[900px] border-collapse">
+              <thead>
+                <tr className="border-b border-slate-900 bg-slate-900/30 text-slate-400 text-xs font-mono tracking-wider uppercase text-left">
+                  <th className="px-6 py-4 font-semibold">User</th>
+                  <th className="px-6 py-4 font-semibold">GitHub Commits</th>
+                  <th className="px-6 py-4 font-semibold">LeetCode Solved</th>
+                  <th className="px-6 py-4 font-semibold">Codeforces Rating</th>
+                  <th className="px-6 py-4 font-semibold">GFG Solved</th>
+                  <th className="px-6 py-4 font-semibold">HackerRank</th>
+                  <th className="px-6 py-4 font-semibold">Overall Score</th>
+                  <th className="px-6 py-4 font-semibold">Tracking Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-900 text-sm text-left">
+                {codingProfilesList.map((p) => {
+                  const student = usersList.find(u => u.id === p.user_id) || {};
+                  return (
+                    <tr key={p.id} className="hover:bg-slate-900/10 transition-colors">
+                      <td className="px-6 py-4">
+                        <div className="flex flex-col">
+                          <span className="font-semibold text-slate-200">{student.full_name || `@user_${p.user_id}`}</span>
+                          <span className="text-xs text-slate-500 font-mono">@{student.username || 'unknown'} ({student.role})</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 font-mono text-slate-300">
+                        {p.github_username ? (
+                          <div className="flex flex-col">
+                            <span className="text-slate-300 font-bold">{p.github_commits} Commits</span>
+                            <span className="text-[10px] text-slate-500 font-semibold">@{p.github_username}</span>
+                          </div>
+                        ) : <span className="text-slate-650 italic text-xs">Not linked</span>}
+                      </td>
+                      <td className="px-6 py-4 font-mono text-slate-300">
+                        {p.leetcode_username ? (
+                          <div className="flex flex-col">
+                            <span className="text-slate-300 font-bold">{p.leetcode_solved} Solved</span>
+                            <span className="text-[10px] text-slate-500 font-semibold">@{p.leetcode_username}</span>
+                          </div>
+                        ) : <span className="text-slate-650 italic text-xs">Not linked</span>}
+                      </td>
+                      <td className="px-6 py-4 font-mono text-slate-300">
+                        {p.codeforces_username ? (
+                          <div className="flex flex-col">
+                            <span className="text-emerald-450 font-bold">{p.codeforces_rating} Rating</span>
+                            <span className="text-[10px] text-slate-500 font-semibold">@{p.codeforces_username}</span>
+                          </div>
+                        ) : <span className="text-slate-650 italic text-xs">Not linked</span>}
+                      </td>
+                      <td className="px-6 py-4 font-mono text-slate-300">
+                        {p.gfg_username ? (
+                          <div className="flex flex-col">
+                            <span className="text-slate-300 font-bold">{p.gfg_solved} Solved</span>
+                            <span className="text-[10px] text-slate-500 font-semibold">@{p.gfg_username}</span>
+                          </div>
+                        ) : <span className="text-slate-650 italic text-xs">Not linked</span>}
+                      </td>
+                      <td className="px-6 py-4 font-mono text-slate-300">
+                        {p.hackerrank_username ? (
+                          <div className="flex flex-col">
+                            <span className="text-slate-300 font-bold">Linked</span>
+                            <span className="text-[10px] text-slate-500 font-semibold">@{p.hackerrank_username}</span>
+                          </div>
+                        ) : <span className="text-slate-650 italic text-xs">Not linked</span>}
+                      </td>
+                      <td className="px-6 py-4 font-mono text-emerald-455 font-extrabold text-base">
+                        {p.overall_score}
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase ${
+                          p.is_tracking_enabled ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400' : 'bg-slate-900 border border-slate-850 text-slate-550'
+                        }`}>
+                          {p.is_tracking_enabled ? 'ACTIVE_TRACKING' : 'DISABLED'}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderExecutiveAnalytics = () => {
+    if (!analyticsData) {
+      return (
+        <div className="flex justify-center py-20 text-emerald-400 font-mono">
+          <RefreshCw className="animate-spin mr-2" size={20} /> LOADING_EXECUTIVE_TELEMETRY_
+        </div>
+      );
+    }
+
+    const {
+      total_members,
+      student_count,
+      core_count,
+      events_count,
+      total_rsvps,
+      tech_distribution = [],
+      event_participation = [],
+      project_trends = [],
+      member_growth = []
+    } = analyticsData;
+
+    const growthWidth = 500;
+    const growthHeight = 180;
+    const padding = 30;
+    
+    let growthPoints = '';
+    let growthPointsArea = `0,${growthHeight - padding}`;
+    if (member_growth.length > 0) {
+      const maxVal = Math.max(...member_growth.map(d => d.value)) || 10;
+      const stepX = (growthWidth - padding * 2) / (member_growth.length - 1 || 1);
+      member_growth.forEach((d, idx) => {
+        const x = padding + idx * stepX;
+        const y = growthHeight - padding - ((d.value / maxVal) * (growthHeight - padding * 2));
+        growthPoints += `${idx === 0 ? 'M' : 'L'}${x},${y}`;
+        growthPointsArea += ` L${x},${y}`;
+      });
+      growthPointsArea += ` L${growthWidth - padding},${growthHeight - padding} Z`;
+    }
+
+    return (
+      <div className="space-y-8 animate-fade-in text-left">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+          <GlowingCard hoverGlow="emerald" className="p-6">
+            <span className="text-[10px] font-mono text-slate-500 uppercase tracking-widest font-bold block">// TOTAL_MEMBERS</span>
+            <div className="text-4xl font-extrabold text-slate-100 mt-2 font-sans">{total_members}</div>
+            <p className="text-[10px] text-emerald-400 mt-1 font-mono">Student Cohort Roster Capacity</p>
+          </GlowingCard>
+          
+          <GlowingCard hoverGlow="blue" className="p-6">
+            <span className="text-[10px] font-mono text-slate-500 uppercase tracking-widest font-bold block">// RSVP_ATTENDANCE</span>
+            <div className="text-4xl font-extrabold text-blue-400 mt-2 font-sans">{total_rsvps}</div>
+            <p className="text-[10px] text-slate-400 mt-1 font-mono">Aggregated RSVPs Across Events</p>
+          </GlowingCard>
+          
+          <GlowingCard hoverGlow="indigo" className="p-6">
+            <span className="text-[10px] font-mono text-slate-500 uppercase tracking-widest font-bold block">// LAUNCHED_EVENTS</span>
+            <div className="text-4xl font-extrabold text-indigo-400 mt-2 font-sans">{events_count}</div>
+            <p className="text-[10px] text-slate-400 mt-1 font-mono">Active Scheduled Club Sessions</p>
+          </GlowingCard>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <div className="glass-panel p-6 rounded-3xl border border-slate-800/40 relative overflow-hidden text-center">
+            <span className="text-xs font-mono text-slate-500 uppercase tracking-wider font-bold block mb-6 text-left">// Cohort Registration Growth</span>
+            
+            <div className="w-full overflow-x-auto flex justify-center">
+              <svg width={growthWidth} height={growthHeight} className="overflow-visible">
+                <defs>
+                  <linearGradient id="growthGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#10B981" stopOpacity="0.25"/>
+                    <stop offset="100%" stopColor="#10B981" stopOpacity="0.0"/>
+                  </linearGradient>
+                </defs>
+                {[0, 1, 2, 3].map((gIdx) => {
+                  const y = padding + (gIdx * (growthHeight - padding * 2)) / 3;
+                  return (
+                    <line key={gIdx} x1={padding} y1={y} x2={growthWidth - padding} y2={y} stroke="rgba(255,255,255,0.03)" strokeWidth="1" />
+                  );
+                })}
+                {growthPoints && (
+                  <path d={growthPointsArea} fill="url(#growthGrad)" />
+                )}
+                {growthPoints && (
+                  <path d={growthPoints} fill="none" stroke="#10B981" strokeWidth="3" strokeLinecap="round" className="drop-shadow-[0_0_8px_rgba(16,185,129,0.3)]" />
+                )}
+                {member_growth.map((d, idx) => {
+                  const maxVal = Math.max(...member_growth.map(x => x.value)) || 10;
+                  const stepX = (growthWidth - padding * 2) / (member_growth.length - 1 || 1);
+                  const x = padding + idx * stepX;
+                  const y = growthHeight - padding - ((d.value / maxVal) * (growthHeight - padding * 2));
+                  return (
+                    <g key={idx} className="group cursor-pointer">
+                      <circle cx={x} cy={y} r="5" fill="#10B981" className="transition-all hover:r-7" />
+                      <text x={x} y={y - 12} fill="#A7F3D0" fontSize="10" fontFamily="monospace" textAnchor="middle" fontWeight="bold">
+                        {d.value}
+                      </text>
+                      <text x={x} y={growthHeight - 6} fill="#64748B" fontSize="9" fontFamily="monospace" textAnchor="middle">
+                        {d.name}
+                      </text>
+                    </g>
+                  );
+                })}
+              </svg>
+            </div>
+          </div>
+
+          <div className="glass-panel p-6 rounded-3xl border border-slate-800/40">
+            <span className="text-xs font-mono text-slate-500 uppercase tracking-wider font-bold block mb-6">// Event Participation Distribution</span>
+            <div className="space-y-4">
+              {event_participation.length === 0 ? (
+                <p className="text-xs text-slate-500 italic">No registrations logged yet.</p>
+              ) : (
+                event_participation.slice(0, 5).map((item, idx) => {
+                  const maxVal = Math.max(...event_participation.map(x => x.value)) || 1;
+                  const percent = Math.min(100, Math.round((item.value / maxVal) * 100));
+                  return (
+                    <div key={idx} className="space-y-1.5 text-left">
+                      <div className="flex justify-between text-xs font-mono">
+                        <span className="text-slate-350 font-bold truncate max-w-[200px]">{item.name}</span>
+                        <span className="text-emerald-450 font-bold">{item.value} RSVPs</span>
+                      </div>
+                      <div className="w-full h-2.5 bg-slate-950 rounded-full overflow-hidden border border-slate-900">
+                        <div
+                          style={{ width: `${percent}%` }}
+                          className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full transition-all duration-1000 ease-out"
+                        />
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+
+          <div className="glass-panel p-6 rounded-3xl border border-slate-800/40">
+            <span className="text-xs font-mono text-slate-500 uppercase tracking-wider font-bold block mb-6">// Tech Stack Usage Frequency</span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {tech_distribution.length === 0 ? (
+                <p className="text-xs text-slate-500 italic sm:col-span-2">No projects submitted yet.</p>
+              ) : (
+                tech_distribution.slice(0, 6).map((tech, idx) => {
+                  const maxVal = Math.max(...tech_distribution.map(x => x.value)) || 1;
+                  const percent = Math.min(100, Math.round((tech.value / maxVal) * 100));
+                  return (
+                    <div key={idx} className="p-3 bg-slate-950/40 border border-slate-900 rounded-2xl space-y-1">
+                      <div className="flex justify-between text-[11px] font-mono">
+                        <span className="text-slate-350 font-bold">{tech.name}</span>
+                        <span className="text-emerald-450 font-bold">{tech.value} Projs</span>
+                      </div>
+                      <div className="w-full h-1.5 bg-slate-950 rounded-full overflow-hidden">
+                        <div
+                          style={{ width: `${percent}%` }}
+                          className="h-full bg-emerald-500 rounded-full"
+                        />
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+
+          <div className="glass-panel p-6 rounded-3xl border border-slate-800/40">
+            <span className="text-xs font-mono text-slate-500 uppercase tracking-wider font-bold block mb-6">// Engineering Project Lifecycles</span>
+            <div className="space-y-4">
+              {project_trends.length === 0 ? (
+                <p className="text-xs text-slate-550 italic">No projects showcase entries found.</p>
+              ) : (
+                project_trends.map((item, idx) => {
+                  const maxVal = Math.max(...project_trends.map(x => x.value)) || 1;
+                  const percent = Math.min(100, Math.round((item.value / maxVal) * 100));
+                  return (
+                    <div key={idx} className="space-y-1 text-left">
+                      <div className="flex justify-between text-xs font-mono">
+                        <span className="text-slate-400">{item.name}</span>
+                        <span className="text-indigo-400 font-bold">{item.value} Projects</span>
+                      </div>
+                      <div className="w-full h-2.5 bg-slate-950 rounded-full overflow-hidden border border-slate-900">
+                        <div
+                          style={{ width: `${percent}%` }}
+                          className="h-full bg-gradient-to-r from-indigo-500 to-blue-500 rounded-full"
+                        />
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   // ==========================================
   //     ADMIN & CORE CONTROL PANEL RENDER
@@ -1095,6 +1953,15 @@ export default function AdminDashboard() {
                 </td>
                 <td className="px-6 py-4">
                   <div className="flex items-center justify-center gap-3">
+                    {['admin', 'super_admin', 'super admin', 'coordinator', 'core', 'core_team', 'core team'].includes(u.role?.toLowerCase()) && (
+                      <button
+                        onClick={() => handleOpenManageHandles(u)}
+                        className="p-1.5 hover:bg-slate-800/60 border border-transparent hover:border-slate-800 rounded-lg text-slate-450 hover:text-emerald-400 transition-colors cursor-pointer"
+                        title="Manage Coding Profiles"
+                      >
+                        <Code size={14} />
+                      </button>
+                    )}
                     <button
                       onClick={() => handleOpenResetPassword(u.id)}
                       className="p-1.5 hover:bg-slate-800/60 border border-transparent hover:border-slate-800 rounded-lg text-slate-400 hover:text-indigo-400 transition-colors cursor-pointer"
@@ -1672,6 +2539,10 @@ export default function AdminDashboard() {
       { id: 'projects', label: 'Projects Showcase', icon: <Code size={18} />, visible: true },
       { id: 'committee', label: 'Committee Lists', icon: <Users size={18} />, visible: userProfile?.role === 'admin' },
       { id: 'resources', label: 'Resources DB', icon: <BookOpen size={18} />, visible: true },
+      { id: 'analytics', label: 'Executive Analytics', icon: <BarChart3 size={18} />, visible: userProfile?.role === 'admin' },
+      { id: 'cms', label: 'CMS Settings', icon: <Globe size={18} />, visible: userProfile?.role === 'admin' },
+      { id: 'achievements', label: 'Achievements Ledger', icon: <Award size={18} />, visible: userProfile?.role === 'admin' },
+      { id: 'coding-sync', label: 'Coding Standings Sync', icon: <RefreshCw size={18} />, visible: userProfile?.role === 'admin' },
     ].filter(link => link.visible);
   };
 
@@ -1740,7 +2611,7 @@ export default function AdminDashboard() {
             </h2>
           </div>
 
-          {userProfile?.role !== 'student' && activeTab !== 'overview' && activeTab !== 'approvals' && activeTab !== 'contests' && activeTab !== 'claims' && (
+          {userProfile?.role !== 'student' && activeTab !== 'overview' && activeTab !== 'approvals' && activeTab !== 'contests' && activeTab !== 'claims' && activeTab !== 'analytics' && activeTab !== 'cms' && activeTab !== 'coding-sync' && (
             <div className="flex items-center gap-3">
               {selectedIds.length > 0 && (
                 <button
@@ -1787,11 +2658,43 @@ export default function AdminDashboard() {
                 {activeTab === 'projects' && projects.length > 0 && renderProjectsTable()}
                 {activeTab === 'committee' && committee.length > 0 && renderCommitteeTable()}
                 {activeTab === 'resources' && resources.length > 0 && renderResourcesTable()}
-                {activeTab === 'users' && usersList.length > 0 && renderUsersTable()}
+                
+                {activeTab === 'users' && (
+                  <div className="space-y-6">
+                    <div className="glass-panel p-6 rounded-3xl border border-slate-800/40 flex flex-col sm:flex-row justify-between items-center gap-6 text-left relative overflow-hidden">
+                      <div className="absolute top-0 right-0 w-32 h-32 rounded-full bg-indigo-500/5 blur-[35px] pointer-events-none"></div>
+                      <div className="space-y-1 flex-1 text-left">
+                        <h4 className="text-sm font-mono font-bold text-slate-300 uppercase tracking-wide">// BULK MEMBERS INGESTION ENGINE</h4>
+                        <p className="text-xs text-slate-500 leading-relaxed max-w-xl">
+                          Ingest large cohorts using spreadsheets. Duplicate checking ensures user accounts are updated backward-compatibly with standard credentials like <code className="bg-slate-950 px-1 py-0.5 border border-slate-900 text-indigo-400 font-mono text-[10px] rounded">Member@123</code>.
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-4 items-center shrink-0">
+                        <label className="px-4 py-2.5 bg-slate-900 border border-slate-800 hover:border-indigo-500/40 text-indigo-455 hover:text-indigo-400 rounded-xl text-xs font-mono font-bold cursor-pointer transition-all flex items-center gap-1.5 shadow-lg">
+                          <Upload size={14} /> IMPORT_CSV_
+                          <input type="file" accept=".csv" onChange={handleImportCsv} className="hidden" />
+                        </label>
+                        <button
+                          onClick={handleExportUsers}
+                          className="px-4 py-2.5 bg-indigo-500/10 border border-indigo-500/20 hover:border-indigo-500/40 text-indigo-455 hover:text-indigo-400 rounded-xl text-xs font-mono font-bold cursor-pointer transition-all flex items-center gap-1.5 shadow-lg"
+                        >
+                          <Download size={14} /> EXPORT_CSV_
+                        </button>
+                      </div>
+                    </div>
+                    {usersList.length > 0 && renderUsersTable()}
+                  </div>
+                )}
+                
                 {activeTab === 'announcements' && announcements.length > 0 && renderAnnouncementsTable()}
                 {activeTab === 'approvals' && approvalRequests.length > 0 && renderApprovalsTable()}
                 {activeTab === 'contests' && renderContestsTable()}
                 {activeTab === 'claims' && claims.length > 0 && renderClaimsTable()}
+                
+                {activeTab === 'cms' && renderCmsEditor()}
+                {activeTab === 'achievements' && renderAchievementsLedger()}
+                {activeTab === 'coding-sync' && renderCodingSyncManager()}
+                {activeTab === 'analytics' && renderExecutiveAnalytics()}
               </>
             )}
 
@@ -1800,6 +2703,7 @@ export default function AdminDashboard() {
               (activeTab === 'announcements' && announcements.length === 0) ||
               (activeTab === 'bulletins' && announcements.length === 0) ||
               (activeTab === 'approvals' && approvalRequests.length === 0) ||
+              (activeTab === 'achievements' && achievementsList.length === 0) ||
               (activeTab === 'claims' && claims.length === 0)) && (
               <div className="text-center py-20 glass-panel rounded-3xl">
                 <p className="text-slate-400 font-mono">NO_DATA_RECORDS_AVAILABLE_IN_THIS_TAB</p>
@@ -2064,6 +2968,50 @@ export default function AdminDashboard() {
                       <input type="password" required placeholder="Enter password..." value={formData.password || ''} onChange={(e) => setFormData({ ...formData, password: e.target.value })} className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-slate-100 text-sm focus:outline-none focus:border-emerald-500" />
                     </div>
                   )}
+                </>
+              )}
+
+              {activeTab === 'achievements' && (
+                <>
+                  <div className="space-y-1 text-left">
+                    <label className="text-xs font-mono font-semibold text-slate-500">ACHIEVEMENT_TITLE</label>
+                    <input type="text" required placeholder="e.g. Smart Hackathon First Place..." value={formData.title || ''} onChange={(e) => setFormData({ ...formData, title: e.target.value })} className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-slate-100 text-sm focus:outline-none focus:border-emerald-500" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 text-left">
+                    <div className="space-y-1">
+                      <label className="text-xs font-mono font-semibold text-slate-500">CATEGORY</label>
+                      <select value={formData.category || 'Hackathons'} onChange={(e) => setFormData({ ...formData, category: e.target.value })} className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-slate-350 text-sm focus:outline-none focus:border-emerald-500 cursor-pointer">
+                        <option value="Hackathons">Hackathons</option>
+                        <option value="Coding Competitions">Coding Competitions</option>
+                        <option value="Research Publications">Research Publications</option>
+                        <option value="Certifications">Certifications</option>
+                        <option value="Awards">Awards</option>
+                        <option value="Community Contributions">Community Contributions</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-mono font-semibold text-slate-500">ACHIEVEMENT_DATE</label>
+                      <input type="date" required value={formData.date || ''} onChange={(e) => setFormData({ ...formData, date: e.target.value })} className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-slate-100 text-sm focus:outline-none focus:border-emerald-500" />
+                    </div>
+                  </div>
+                  <div className="space-y-1 text-left">
+                    <label className="text-xs font-mono font-semibold text-slate-500">ACHIEVED_BY (MEMBERS COMMA SEPARATED)</label>
+                    <input type="text" required placeholder="e.g. Siddharth Mehta, Amit Patel" value={formData.achieved_by || ''} onChange={(e) => setFormData({ ...formData, achieved_by: e.target.value })} className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-slate-100 text-sm focus:outline-none focus:border-emerald-500" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 text-left">
+                    <div className="space-y-1">
+                      <label className="text-xs font-mono font-semibold text-slate-500">EVIDENCE_LINK_URL</label>
+                      <input type="url" placeholder="https://..." value={formData.link || ''} onChange={(e) => setFormData({ ...formData, link: e.target.value })} className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-slate-100 text-sm focus:outline-none focus:border-emerald-500" />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-mono font-semibold text-slate-500">IMAGE_URL</label>
+                      <input type="url" placeholder="https://unsplash.com/..." value={formData.image_url || ''} onChange={(e) => setFormData({ ...formData, image_url: e.target.value })} className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-slate-100 text-sm focus:outline-none focus:border-emerald-500" />
+                    </div>
+                  </div>
+                  <div className="space-y-1 text-left">
+                    <label className="text-xs font-mono font-semibold text-slate-500">DESCRIPTION</label>
+                    <textarea rows={3} required placeholder="Detail the victory context..." value={formData.description || ''} onChange={(e) => setFormData({ ...formData, description: e.target.value })} className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-slate-100 text-sm focus:outline-none focus:border-emerald-500" />
+                  </div>
                 </>
               )}
 
@@ -2377,6 +3325,152 @@ export default function AdminDashboard() {
               <div className="pt-4 border-t border-slate-900 flex justify-end gap-3">
                 <button type="button" onClick={() => setShowResolveClaimModal(false)} className="px-4 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs font-mono text-slate-400 hover:text-slate-200 transition-colors cursor-pointer">CANCEL_</button>
                 <button type="submit" disabled={loading} className="px-5 py-2 bg-emerald-400 text-slate-900 hover:bg-emerald-300 rounded-xl text-xs font-mono font-bold transition-colors cursor-pointer">{loading ? 'RESOLVING_...' : 'RESOLVE_CLAIM_'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MANAGE CODING PROFILE HANDLES MODAL */}
+      {showHandlesModal && selectedUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="glass-panel w-full max-w-md rounded-3xl border border-slate-800 shadow-2xl overflow-hidden text-left">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-900">
+              <h3 className="font-mono text-sm font-bold text-slate-100 uppercase tracking-wide">
+                // Handles: {selectedUser.full_name || selectedUser.username}
+              </h3>
+              <button onClick={() => setShowHandlesModal(false)} className="p-1 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"><X size={18} /></button>
+            </div>
+
+            <form onSubmit={handleHandlesSubmit} className="p-6 space-y-4">
+              <div className="space-y-1">
+                <label className="text-xs font-mono font-semibold text-slate-500">GITHUB_USERNAME</label>
+                <input 
+                  type="text" 
+                  value={handlesFormData.github_username} 
+                  onChange={(e) => setHandlesFormData({ ...handlesFormData, github_username: e.target.value })} 
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-slate-100 text-sm focus:outline-none focus:border-emerald-500" 
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-mono font-semibold text-slate-500">LEETCODE_USERNAME</label>
+                  <input 
+                    type="text" 
+                    value={handlesFormData.leetcode_username} 
+                    onChange={(e) => setHandlesFormData({ ...handlesFormData, leetcode_username: e.target.value })} 
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-slate-100 text-sm focus:outline-none focus:border-emerald-500" 
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-mono font-semibold text-slate-500">CODEFORCES_USERNAME</label>
+                  <input 
+                    type="text" 
+                    value={handlesFormData.codeforces_username} 
+                    onChange={(e) => setHandlesFormData({ ...handlesFormData, codeforces_username: e.target.value })} 
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-slate-100 text-sm focus:outline-none focus:border-emerald-500" 
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-mono font-semibold text-slate-500">GEEKSFORGEEKS_USERNAME</label>
+                  <input 
+                    type="text" 
+                    value={handlesFormData.gfg_username} 
+                    onChange={(e) => setHandlesFormData({ ...handlesFormData, gfg_username: e.target.value })} 
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-slate-100 text-sm focus:outline-none focus:border-emerald-500" 
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-mono font-semibold text-slate-500">HACKERRANK_USERNAME</label>
+                  <input 
+                    type="text" 
+                    value={handlesFormData.hackerrank_username} 
+                    onChange={(e) => setHandlesFormData({ ...handlesFormData, hackerrank_username: e.target.value })} 
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-slate-100 text-sm focus:outline-none focus:border-emerald-500" 
+                  />
+                </div>
+              </div>
+
+              {codingProfilesList.find(p => p.user_id === selectedUser.id) && (
+                <div className="pt-2 border-t border-slate-900 flex justify-between gap-2 items-center flex-wrap">
+                  <button
+                    type="button"
+                    onClick={handleHandlesSync}
+                    className="px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-450 hover:bg-emerald-500/20 rounded-lg text-[10px] font-mono font-bold cursor-pointer"
+                  >
+                    SYNC_NOW
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleHandlesToggleTracking}
+                    className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-350 rounded-lg text-[10px] font-mono font-bold cursor-pointer"
+                  >
+                    {codingProfilesList.find(p => p.user_id === selectedUser.id).is_tracking_enabled ? 'DISABLE_TRACKING' : 'ENABLE_TRACKING'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleHandlesRemove}
+                    className="px-3 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 text-rose-400 rounded-lg text-[10px] font-mono font-bold cursor-pointer"
+                  >
+                    REMOVE_PROFILE
+                  </button>
+                </div>
+              )}
+
+              <div className="pt-4 border-t border-slate-900 flex justify-end gap-3">
+                <button type="button" onClick={() => setShowHandlesModal(false)} className="px-4 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs font-mono text-slate-400 hover:text-slate-200 transition-colors cursor-pointer">CANCEL_</button>
+                <button type="submit" disabled={loading} className="px-5 py-2 bg-emerald-400 text-slate-900 hover:bg-emerald-300 rounded-xl text-xs font-mono font-bold transition-colors cursor-pointer">SAVE_PROFILE_</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* RESET LEADERBOARD MODAL */}
+      {showResetLeaderboardModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="glass-panel w-full max-w-sm rounded-3xl border border-slate-800 shadow-2xl overflow-hidden text-left">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-900">
+              <h3 className="font-mono text-sm font-bold text-slate-100 uppercase tracking-wide">
+                // Reset Leaderboard
+              </h3>
+              <button onClick={() => setShowResetLeaderboardModal(false)} className="p-1 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"><X size={18} /></button>
+            </div>
+
+            <form onSubmit={handleResetLeaderboardSubmit} className="p-6 space-y-4">
+              <div className="space-y-1">
+                <label className="text-xs font-mono font-semibold text-slate-500">RESET_INTERVAL_TYPE</label>
+                <select 
+                  value={resetLeaderboardFormData.snapshot_type} 
+                  onChange={(e) => setResetLeaderboardFormData({ ...resetLeaderboardFormData, snapshot_type: e.target.value })} 
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-slate-300 text-sm focus:outline-none focus:border-emerald-500 cursor-pointer"
+                >
+                  <option value="monthly">Monthly Reset</option>
+                  <option value="semester">Semester Reset</option>
+                  <option value="annual">Annual Reset</option>
+                  <option value="archive">Manual Standing Archive</option>
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-mono font-semibold text-slate-500">SNAPSHOT_LABEL_NAME</label>
+                <input 
+                  type="text" 
+                  required 
+                  placeholder="e.g. Term 1 Standing Snap..." 
+                  value={resetLeaderboardFormData.name} 
+                  onChange={(e) => setResetLeaderboardFormData({ ...resetLeaderboardFormData, name: e.target.value })} 
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-slate-100 text-sm focus:outline-none focus:border-emerald-500" 
+                />
+              </div>
+
+              <div className="pt-4 border-t border-slate-900 flex justify-end gap-3">
+                <button type="button" onClick={() => setShowResetLeaderboardModal(false)} className="px-4 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs font-mono text-slate-400 hover:text-slate-200 transition-colors cursor-pointer">CANCEL_</button>
+                <button type="submit" disabled={loading} className="px-5 py-2 bg-rose-500 text-white hover:bg-rose-400 rounded-xl text-xs font-mono font-bold transition-colors cursor-pointer">PERFORM_RESET_</button>
               </div>
             </form>
           </div>

@@ -1,7 +1,26 @@
-import React from 'react';
-import { ShieldCheck, HeartHandshake, Compass, Users } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ShieldCheck, HeartHandshake, Compass, Users, Target, Eye } from 'lucide-react';
+import { getPublicCms } from '../utils/api';
+import GlowingCard from '../components/GlowingCard';
 
 export default function About() {
+  const [cms, setCms] = useState({});
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadCms() {
+      try {
+        const cmsData = await getPublicCms();
+        setCms(cmsData);
+      } catch (err) {
+        console.error('Failed to load CMS', err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadCms();
+  }, []);
+
   const values = [
     {
       title: 'Collaboration First',
@@ -10,7 +29,7 @@ export default function About() {
     },
     {
       title: 'Continuous Learning',
-      desc: 'Technology shifts fast. We hold regular workshops and coding labs to stay ahead in web, cloud, and AI engineering.',
+      desc: 'Continuous training shifts tech stacks. We hold regular workshops and coding labs to stay ahead in web, cloud, and AI engineering.',
       icon: <Compass className="text-indigo-400" size={24} />
     },
     {
@@ -38,10 +57,10 @@ export default function About() {
             About <span className="text-emerald-400">GFGCOE Coding Club</span>
           </h1>
           <p className="text-slate-400 leading-relaxed">
-            Established in 2025, the Coding Club of Godavari Foundations Godavari College Of Engineering (GFGCOE), Jalgaon was founded with a singular aim: to bridge the gap between academic theory and active software industry requirements. 
+            {cms.about_story || "Established in 2025, the Coding Club of Godavari Foundations Godavari College Of Engineering (GFGCOE), Jalgaon was founded with a singular aim: to bridge the gap between academic theory and active software industry requirements."}
           </p>
           <p className="text-slate-400 leading-relaxed">
-            What started as a modest group of 15 computer science students holding DSA sessions has blossomed into Godavari College of Engineering's premier programming cohort. We connect software engineers, web architects, algorithmic puzzle solvers, and system designers into a cohesive unit that builds beautiful open-source software and represents our college in national-level contests.
+            What started as a modest group of computer science students holding DSA sessions has blossomed into Godavari College of Engineering's premier programming cohort. We connect software engineers, web architects, algorithmic puzzle solvers, and system designers into a cohesive unit that builds beautiful open-source software and represents our college in national-level contests.
           </p>
         </div>
 
@@ -80,6 +99,33 @@ export default function About() {
             </div>
           ))}
         </div>
+      </section>
+
+      {/* MISSION & VISION DYNAMIC CMS CARD ROW */}
+      <section className="grid grid-cols-1 md:grid-cols-2 gap-8 text-left">
+        <GlowingCard hoverGlow="emerald" className="p-8 space-y-4 border border-slate-800/50">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-450 rounded-xl">
+              <Target size={20} />
+            </div>
+            <h3 className="text-xl font-bold text-slate-100 font-sans">Our Mission</h3>
+          </div>
+          <p className="text-sm text-slate-400 leading-relaxed font-sans">
+            {cms.about_mission || "Our mission is to establish a vibrant ecosystem that cultivates logical critical thinking and hands-on coding proficiency among young developers."}
+          </p>
+        </GlowingCard>
+
+        <GlowingCard hoverGlow="indigo" className="p-8 space-y-4 border border-slate-800/50">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 rounded-xl">
+              <Eye size={20} />
+            </div>
+            <h3 className="text-xl font-bold text-slate-100 font-sans">Our Vision</h3>
+          </div>
+          <p className="text-sm text-slate-400 leading-relaxed font-sans">
+            {cms.about_vision || "We envision GFGCOE as a powerhouse of technological innovation, where every student engineer possesses the tools and guidance to build world-class code assets."}
+          </p>
+        </GlowingCard>
       </section>
 
       {/* 3. FACULTY MESSAGES */}

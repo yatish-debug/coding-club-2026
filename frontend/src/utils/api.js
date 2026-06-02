@@ -296,4 +296,133 @@ export const trackDownload = async (id) => {
   return response.data;
 };
 
+// --- WEBSITE CMS APIS ---
+export const getPublicCms = async () => {
+  const response = await api.get('/cms');
+  return response.data;
+};
+
+export const getAdminCms = async () => {
+  const response = await api.get('/admin/cms');
+  return response.data;
+};
+
+export const updateCmsSetting = async (settingData) => {
+  const response = await api.post('/admin/cms', settingData);
+  return response.data;
+};
+
+// --- CLUB ACHIEVEMENTS APIS ---
+export const getClubAchievements = async () => {
+  const response = await api.get('/achievements');
+  return response.data;
+};
+
+export const createClubAchievement = async (achData) => {
+  const response = await api.post('/admin/achievements', achData);
+  return response.data;
+};
+
+export const updateClubAchievement = async (id, achData) => {
+  const response = await api.put(`/admin/achievements/${id}`, achData);
+  return response.data;
+};
+
+export const deleteClubAchievement = async (id) => {
+  await api.delete(`/admin/achievements/${id}`);
+};
+
+// --- EXECUTIVE TELEMETRY ANALYTICS ---
+export const getExecutiveAnalytics = async () => {
+  const response = await api.get('/admin/analytics');
+  return response.data;
+};
+
+// --- CODING PROFILES STANDINGS APIS ---
+export const getCodingProfiles = async () => {
+  const response = await api.get('/coding-profiles');
+  return response.data;
+};
+
+export const updateMyCodingProfile = async (profileData) => {
+  const response = await api.post('/coding-profiles/my', profileData);
+  return response.data;
+};
+
+export const syncCodingProfiles = async () => {
+  const response = await api.post('/admin/coding-profiles/sync');
+  return response.data;
+};
+
+// --- MEMBERS CSV BULK IMPORT/EXPORT APIS ---
+export const importUsersCsv = async (formData) => {
+  const response = await api.post('/admin/users/import', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  });
+  return response.data;
+};
+
+export const getExportUsersUrl = () => {
+  const token = localStorage.getItem('token');
+  return `${API_BASE_URL}/admin/users/export?token=${token}`; // or raw link
+};
+
+// --- NEW COMMITTEE LEADERBOARD & SNAPSHOT APIS ---
+export const getCommitteeLeaderboard = async () => {
+  const response = await api.get('/committee-leaderboard');
+  return response.data;
+};
+
+export const getCommitteeLeaderboardStats = async () => {
+  const response = await api.get('/admin/committee-leaderboard/stats');
+  return response.data;
+};
+
+export const recalculateLeaderboard = async () => {
+  const response = await api.post('/admin/leaderboard/recalculate');
+  return response.data;
+};
+
+export const resetLeaderboard = async (resetData) => {
+  const response = await api.post('/admin/leaderboard/reset', resetData);
+  return response.data;
+};
+
+export const getLeaderboardSnapshots = async () => {
+  const response = await api.get('/admin/leaderboard/snapshots');
+  return response.data;
+};
+
+export const restoreLeaderboardSnapshot = async (id) => {
+  const response = await api.post(`/admin/leaderboard/snapshots/${id}/restore`);
+  return response.data;
+};
+
+export const createCodingProfileAdmin = async (profileData) => {
+  const response = await api.post('/admin/coding-profiles', profileData);
+  return response.data;
+};
+
+export const updateCodingProfileAdmin = async (id, profileData) => {
+  const response = await api.put(`/admin/coding-profiles/${id}`, profileData);
+  return response.data;
+};
+
+export const deleteCodingProfileAdmin = async (id) => {
+  await api.delete(`/admin/coding-profiles/${id}`);
+};
+
+export const syncSingleCodingProfile = async (id) => {
+  const response = await api.post(`/admin/coding-profiles/${id}/sync`);
+  return response.data;
+};
+
+export const toggleCodingProfileTracking = async (id) => {
+  const response = await api.post(`/admin/coding-profiles/${id}/toggle-tracking`);
+  return response.data;
+};
+
 export default api;
+

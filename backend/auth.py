@@ -76,7 +76,8 @@ def get_current_active_user(current_user: models.User = Depends(get_current_user
 
 # 3. Core or Admin Level Check
 def get_current_active_core_or_admin(current_user: models.User = Depends(get_current_active_user)) -> models.User:
-    if current_user.role not in ["admin", "core"]:
+    allowed = ["admin", "super_admin", "super admin", "core", "coordinator", "core_team", "core team"]
+    if current_user.role not in allowed:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Operation not permitted. Core or Admin role required."
@@ -85,7 +86,8 @@ def get_current_active_core_or_admin(current_user: models.User = Depends(get_cur
 
 # 4. Strict Admin Level Check
 def get_current_active_admin(current_user: models.User = Depends(get_current_active_user)) -> models.User:
-    if current_user.role != "admin":
+    allowed = ["admin", "super_admin", "super admin"]
+    if current_user.role not in allowed:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Operation not permitted. Admin role required."

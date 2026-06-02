@@ -22,6 +22,16 @@ class UserBase(BaseModel):
     points: Optional[int] = 0
     certificates: Optional[str] = None
 
+    # Extended Member specifics
+    branch: Optional[str] = None
+    academic_year: Optional[str] = None
+    position: Optional[str] = None
+    bio: Optional[str] = None
+    skills: Optional[str] = None
+    github: Optional[str] = None
+    linkedin: Optional[str] = None
+    profile_photo: Optional[str] = None
+
     @field_validator('email')
     @classmethod
     def validate_email_domain(cls, v: str) -> str:
@@ -34,8 +44,14 @@ class UserBase(BaseModel):
     @classmethod
     def validate_role(cls, v: str) -> str:
         role_lower = v.lower().strip()
-        if role_lower not in ["admin", "core", "student"]:
-            raise ValueError("Role must be 'admin', 'core', or 'student'.")
+        allowed_roles = [
+            "admin", "core", "student", 
+            "super_admin", "super admin", 
+            "coordinator", "core_team", "core team", 
+            "member", "alumni"
+        ]
+        if role_lower not in allowed_roles:
+            raise ValueError("Role must be an allowed club role.")
         return role_lower
 
 class UserCreate(UserBase):
@@ -67,6 +83,16 @@ class UserUpdate(BaseModel):
     # Expose student updates
     points: Optional[int] = None
     certificates: Optional[str] = None
+
+    # Extended Member specifics
+    branch: Optional[str] = None
+    academic_year: Optional[str] = None
+    position: Optional[str] = None
+    bio: Optional[str] = None
+    skills: Optional[str] = None
+    github: Optional[str] = None
+    linkedin: Optional[str] = None
+    profile_photo: Optional[str] = None
 
     @field_validator('password')
     @classmethod
@@ -102,8 +128,14 @@ class UserUpdate(BaseModel):
         if v is None:
             return v
         role_lower = v.lower().strip()
-        if role_lower not in ["admin", "core", "student"]:
-            raise ValueError("Role must be 'admin', 'core', or 'student'.")
+        allowed_roles = [
+            "admin", "core", "student", 
+            "super_admin", "super admin", 
+            "coordinator", "core_team", "core team", 
+            "member", "alumni"
+        ]
+        if role_lower not in allowed_roles:
+            raise ValueError("Role must be an allowed club role.")
         return role_lower
 
 class UserOut(UserBase):
@@ -123,6 +155,8 @@ class EventBase(BaseModel):
     image_url: Optional[str] = None
     registration_link: Optional[str] = None
     category: Optional[str] = "Workshop"
+    status: Optional[str] = "Upcoming"
+    attendance_count: Optional[int] = 0
 
 class EventCreate(EventBase):
     pass
@@ -135,6 +169,8 @@ class EventUpdate(BaseModel):
     image_url: Optional[str] = None
     registration_link: Optional[str] = None
     category: Optional[str] = None
+    status: Optional[str] = None
+    attendance_count: Optional[int] = None
 
 class EventOut(EventBase):
     id: int
@@ -151,9 +187,12 @@ class ProjectBase(BaseModel):
     github_link: Optional[str] = None
     live_link: Optional[str] = None
     image_url: Optional[str] = None
-    
-    # Trace submitter
     submitted_by: Optional[str] = None
+    team_members: Optional[str] = None
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+    completion_percentage: Optional[int] = 100
+    status: Optional[str] = "Completed"
 
 class ProjectCreate(ProjectBase):
     pass
@@ -166,6 +205,11 @@ class ProjectUpdate(BaseModel):
     live_link: Optional[str] = None
     image_url: Optional[str] = None
     submitted_by: Optional[str] = None
+    team_members: Optional[str] = None
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+    completion_percentage: Optional[int] = None
+    status: Optional[str] = None
 
 class ProjectOut(ProjectBase):
     id: int
@@ -402,3 +446,98 @@ class PointClaimResolve(BaseModel):
     status: str  # "approved" or "rejected"
     admin_notes: Optional[str] = None
     points_awarded: Optional[int] = None
+
+# --- NEW TABLES SCHEMAS ---
+class CmsSettingBase(BaseModel):
+    key: str
+    value: str
+    category: str
+
+class CmsSettingCreate(CmsSettingBase):
+    pass
+
+class CmsSettingOut(CmsSettingBase):
+    class Config:
+        from_attributes = True
+
+class ClubAchievementBase(BaseModel):
+    title: str
+    description: str
+    category: str
+    date: datetime
+    achieved_by: str
+    link: Optional[str] = None
+    image_url: Optional[str] = None
+
+class ClubAchievementCreate(ClubAchievementBase):
+    pass
+
+class ClubAchievementUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    category: Optional[str] = None
+    date: Optional[datetime] = None
+    achieved_by: Optional[str] = None
+    link: Optional[str] = None
+    image_url: Optional[str] = None
+
+class ClubAchievementOut(ClubAchievementBase):
+    id: int
+
+    class Config:
+        from_attributes = True
+
+class CodingProfileBase(BaseModel):
+    github_username: Optional[str] = None
+    codeforces_username: Optional[str] = None
+    leetcode_username: Optional[str] = None
+    gfg_username: Optional[str] = None
+    hackerrank_username: Optional[str] = None
+    contest_score: Optional[int] = 0
+    contribution_score: Optional[int] = 0
+    activity_score: Optional[int] = 0
+    overall_score: Optional[int] = 0
+    is_tracking_enabled: Optional[bool] = True
+
+class CodingProfileCreate(CodingProfileBase):
+    user_id: int
+
+class CodingProfileUpdate(CodingProfileBase):
+    pass
+
+class CodingProfileOut(CodingProfileBase):
+    id: int
+    user_id: int
+    coding_score: int
+    problems_solved: int
+    codeforces_rating: int
+    leetcode_solved: int
+    gfg_solved: int
+    github_commits: int
+    contest_score: int
+    contribution_score: int
+    activity_score: int
+    overall_score: int
+    is_tracking_enabled: bool
+    last_synced: datetime
+    user_username: Optional[str] = None
+    user_fullname: Optional[str] = None
+    user_position: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+class LeaderboardSnapshotOut(BaseModel):
+    id: int
+    snapshot_type: str
+    snapshot_date: datetime
+    name: str
+    data: str  # JSON formatted string
+
+    class Config:
+        from_attributes = True
+
+class LeaderboardReset(BaseModel):
+    snapshot_type: str  # "monthly", "semester", "annual", "archive"
+    name: str
+

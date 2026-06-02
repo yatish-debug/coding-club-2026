@@ -143,9 +143,14 @@ export default function Events() {
                 <div className="flex flex-col justify-between flex-1 space-y-4">
                   <div className="space-y-2">
                     <div className="flex justify-between items-start gap-2">
-                      <span className="px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-mono tracking-wide uppercase">
-                        {event.category || 'Workshop'}
-                      </span>
+                      <div className="flex gap-1.5 items-center">
+                        <span className="px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-mono tracking-wide uppercase">
+                          {event.category || 'Workshop'}
+                        </span>
+                        <span className="px-2 py-0.5 rounded bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-[10px] font-mono tracking-wide uppercase">
+                          {event.status || 'Upcoming'}
+                        </span>
+                      </div>
                       <span className="text-[11px] font-mono text-slate-400 flex items-center gap-1">
                         <Calendar size={12} /> {formattedDate}
                       </span>
@@ -159,9 +164,16 @@ export default function Events() {
                   </div>
 
                   <div className="pt-4 border-t border-slate-900/60 flex flex-wrap justify-between items-center gap-2">
-                    <span className="text-xs text-slate-400 flex items-center gap-1 font-mono">
-                      <MapPin size={12} /> {event.location}
-                    </span>
+                    <div className="flex flex-col items-start gap-1">
+                      <span className="text-xs text-slate-400 flex items-center gap-1 font-mono">
+                        <MapPin size={12} /> {event.location}
+                      </span>
+                      {event.attendance_count !== undefined && (
+                        <span className="text-[10px] text-slate-500 font-mono">
+                          CHECKED_IN: {event.attendance_count}
+                        </span>
+                      )}
+                    </div>
                     <div className="flex items-center gap-2">
                       <Link
                         to={`/events/${event.id}`}

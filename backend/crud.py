@@ -486,3 +486,267 @@ def resolve_point_claim(db: Session, claim_id: int, resolution: schemas.PointCla
     db_claim.user_username = user.username if user else "Unknown"
     return db_claim
 
+# --- CMS SETTINGS CRUD ---
+def get_cms_setting(db: Session, key: str):
+    return db.query(models.CmsSetting).filter(models.CmsSetting.key == key).first()
+
+def get_cms_settings(db: Session):
+    return db.query(models.CmsSetting).all()
+
+def set_cms_setting(db: Session, key: str, value: str, category: str):
+    db_setting = get_cms_setting(db, key)
+    if db_setting:
+        db_setting.value = value
+        db_setting.category = category
+    else:
+        db_setting = models.CmsSetting(key=key, value=value, category=category)
+        db.add(db_setting)
+    db.commit()
+    db.refresh(db_setting)
+    return db_setting
+
+# --- CLUB ACHIEVEMENTS CRUD ---
+def get_club_achievements(db: Session, skip: int = 0, limit: int = 100):
+    return db.query(models.ClubAchievement).order_by(models.ClubAchievement.date.desc()).offset(skip).limit(limit).all()
+
+def get_club_achievement(db: Session, achievement_id: int):
+    return db.query(models.ClubAchievement).filter(models.ClubAchievement.id == achievement_id).first()
+
+def create_club_achievement(db: Session, ach: schemas.ClubAchievementCreate):
+    ach_dict = ach.model_dump()
+    for key, value in ach_dict.items():
+        if isinstance(value, str):
+            ach_dict[key] = sanitize_text(value)
+    db_ach = models.ClubAchievement(**ach_dict)
+    db.add(db_ach)
+    db.commit()
+    db.refresh(db_ach)
+    return db_ach
+
+def update_club_achievement(db: Session, achievement_id: int, ach: schemas.ClubAchievementUpdate):
+    db_ach = get_club_achievement(db, achievement_id)
+    if not db_ach:
+        return None
+    for key, value in ach.model_dump(exclude_unset=True).items():
+        if isinstance(value, str):
+            value = sanitize_text(value)
+        setattr(db_ach, key, value)
+    db.commit()
+    db.refresh(db_ach)
+    return db_ach
+
+def delete_club_achievement(db: Session, achievement_id: int):
+    db_ach = get_club_achievement(db, achievement_id)
+    if not db_ach:
+        return False
+    db.delete(db_ach)
+    db.commit()
+    return True
+
+# --- CODING PROFILES CRUD ---
+import json
+
+def is_eligible_committee_role(role: Optional[str]) -> bool:
+    if not role:
+        return False
+    role_clean = role.lower().strip()
+    return role_clean in ["admin", "super_admin", "super admin", "coordinator", "core", "core_team", "core team"]
+
+def get_coding_profile(db: Session, profile_id: int):
+    return db.query(models.CodingProfile).filter(models.CodingProfile.id == profile_id).first()
+
+def get_coding_profile_by_user(db: Session, user_id: int):
+    return db.query(models.CodingProfile).filter(models.CodingProfile.user_id == user_id).first()
+
+def get_coding_profiles(db: Session):
+    profiles = db.query(models.CodingProfile).all()
+    for p in profiles:
+        user = db.query(models.User).filter(models.User.id == p.user_id).first()
+        p.user_username = user.username if user else "Unknown"
+        p.user_fullname = user.full_name if user else "Unknown"
+    return profiles
+
+def create_or_update_coding_profile(db: Session, user_id: int, profile_data: schemas.CodingProfileBase):
+    db_prof = get_coding_profile_by_user(db, user_id)
+    if not db_prof:
+        db_prof = models.CodingProfile(
+            user_id=user_id,
+            github_username=profile_data.github_username,
+            codeforces_username=profile_data.codeforces_username,
+            leetcode_username=profile_data.leetcode_username,
+            gfg_username=profile_data.gfg_username,
+            hackerrank_username=profile_data.hackerrank_username,
+            contest_score=profile_data.contest_score or 0,
+            contribution_score=profile_data.contribution_score or 0,
+            activity_score=profile_data.activity_score or 0,
+            overall_score=profile_data.overall_score or 0,
+            is_tracking_enabled=profile_data.is_tracking_enabled if profile_data.is_tracking_enabled is not None else True
+        )
+        db.add(db_prof)
+    else:
+        db_prof.github_username = profile_data.github_username
+        db_prof.codeforces_username = profile_data.codeforces_username
+        db_prof.leetcode_username = profile_data.leetcode_username
+        db_prof.gfg_username = profile_data.gfg_username
+        db_prof.hackerrank_username = profile_data.hackerrank_username
+        if profile_data.contest_score is not None:
+            db_prof.contest_score = profile_data.contest_score
+        if profile_data.contribution_score is not None:
+            db_prof.contribution_score = profile_data.contribution_score
+        if profile_data.activity_score is not None:
+            db_prof.activity_score = profile_data.activity_score
+        if profile_data.overall_score is not None:
+            db_prof.overall_score = profile_data.overall_score
+        if profile_data.is_tracking_enabled is not None:
+            db_prof.is_tracking_enabled = profile_data.is_tracking_enabled
+    db.commit()
+    db.refresh(db_prof)
+    return db_prof
+
+def delete_coding_profile(db: Session, profile_id: int):
+    p = get_coding_profile(db, profile_id)
+    if not p:
+        return False
+    db.delete(p)
+    db.commit()
+    return True
+
+def sync_coding_profile_metrics(db: Session, p: models.CodingProfile):
+    # Mock data generation based on username length
+    github_commits = len(p.github_username or "") * 12 + 10 if p.github_username else 0
+    leetcode_solved = len(p.leetcode_username or "") * 8 + 15 if p.leetcode_username else 0
+    codeforces_rating = len(p.codeforces_username or "") * 100 + 800 if p.codeforces_username else 0
+    gfg_solved = len(p.gfg_username or "") * 14 + 5 if p.gfg_username else 0
+    hackerrank_score = len(p.hackerrank_username or "") * 10 + 20 if p.hackerrank_username else 0
+    
+    problems_solved = leetcode_solved + gfg_solved + (codeforces_rating // 10)
+    
+    # Calculate different score components
+    coding_score = (leetcode_solved * 10) + int(codeforces_rating * 1.5) + (gfg_solved * 8) + hackerrank_score
+    contest_score = (codeforces_rating // 2) if p.codeforces_username else 0
+    contribution_score = (github_commits * 10) if p.github_username else 0
+    activity_score = 50 if (github_commits > 0 or leetcode_solved > 0) else 0
+    overall_score = coding_score + contest_score + contribution_score + activity_score
+    
+    p.github_commits = github_commits
+    p.leetcode_solved = leetcode_solved
+    p.codeforces_rating = codeforces_rating
+    p.gfg_solved = gfg_solved
+    p.problems_solved = problems_solved
+    
+    p.coding_score = coding_score
+    p.contest_score = contest_score
+    p.contribution_score = contribution_score
+    p.activity_score = activity_score
+    p.overall_score = overall_score
+    p.last_synced = datetime.datetime.utcnow()
+    
+    db.commit()
+    db.refresh(p)
+    return p
+
+def get_committee_coding_leaderboard(db: Session, include_alumni: bool = False):
+    profiles = db.query(models.CodingProfile).filter(models.CodingProfile.is_tracking_enabled == True).all()
+    filtered = []
+    for p in profiles:
+        user = db.query(models.User).filter(models.User.id == p.user_id).first()
+        if not user:
+            continue
+        role_lower = user.role.lower().strip()
+        # Filter active committee members or alumni if enabled
+        is_alumni = role_lower == "alumni"
+        if is_eligible_committee_role(user.role) or (is_alumni and include_alumni):
+            p.user_username = user.username
+            p.user_fullname = user.full_name or user.username
+            p.user_position = user.position or user.role
+            filtered.append(p)
+            
+    # Sort by overall_score descending
+    filtered.sort(key=lambda x: x.overall_score, reverse=True)
+    return filtered
+
+def get_leaderboard_snapshots(db: Session):
+    return db.query(models.LeaderboardSnapshot).order_by(models.LeaderboardSnapshot.snapshot_date.desc()).all()
+
+def create_leaderboard_snapshot(db: Session, snapshot_type: str, name: str, include_alumni: bool = False):
+    leaderboard = get_committee_coding_leaderboard(db, include_alumni=include_alumni)
+    entries = []
+    for idx, p in enumerate(leaderboard):
+        entries.append({
+            "rank": idx + 1,
+            "user_id": p.user_id,
+            "username": p.user_username,
+            "full_name": p.user_fullname,
+            "position": p.user_position,
+            "coding_score": p.coding_score,
+            "contest_score": p.contest_score,
+            "contribution_score": p.contribution_score,
+            "activity_score": p.activity_score,
+            "overall_score": p.overall_score,
+            "leetcode_solved": p.leetcode_solved,
+            "gfg_solved": p.gfg_solved,
+            "codeforces_rating": p.codeforces_rating,
+            "github_commits": p.github_commits,
+            "hackerrank_username": p.hackerrank_username,
+            "github_username": p.github_username,
+            "leetcode_username": p.leetcode_username,
+            "codeforces_username": p.codeforces_username,
+            "gfg_username": p.gfg_username
+        })
+    
+    db_snap = models.LeaderboardSnapshot(
+        snapshot_type=snapshot_type,
+        name=name,
+        data=json.dumps(entries),
+        snapshot_date=datetime.datetime.utcnow()
+    )
+    db.add(db_snap)
+    db.commit()
+    db.refresh(db_snap)
+    return db_snap
+
+def reset_leaderboard_scores(db: Session, snapshot_type: str, name: str, include_alumni: bool = False):
+    db_snap = create_leaderboard_snapshot(db, snapshot_type, name, include_alumni=include_alumni)
+    
+    profiles = db.query(models.CodingProfile).all()
+    for p in profiles:
+        p.coding_score = 0
+        p.problems_solved = 0
+        p.codeforces_rating = 0
+        p.leetcode_solved = 0
+        p.gfg_solved = 0
+        p.github_commits = 0
+        p.contest_score = 0
+        p.contribution_score = 0
+        p.activity_score = 0
+        p.overall_score = 0
+        p.last_synced = datetime.datetime.utcnow()
+        
+    db.commit()
+    return db_snap
+
+def restore_leaderboard_snapshot(db: Session, snapshot_id: int):
+    db_snap = db.query(models.LeaderboardSnapshot).filter(models.LeaderboardSnapshot.id == snapshot_id).first()
+    if not db_snap:
+        return None
+    
+    entries = json.loads(db_snap.data)
+    for entry in entries:
+        p = db.query(models.CodingProfile).filter(models.CodingProfile.user_id == entry["user_id"]).first()
+        if p:
+            p.coding_score = entry["coding_score"]
+            p.problems_solved = entry.get("problems_solved", entry["coding_score"] // 10)
+            p.codeforces_rating = entry["codeforces_rating"]
+            p.leetcode_solved = entry["leetcode_solved"]
+            p.gfg_solved = entry["gfg_solved"]
+            p.github_commits = entry["github_commits"]
+            p.contest_score = entry["contest_score"]
+            p.contribution_score = entry["contribution_score"]
+            p.activity_score = entry["activity_score"]
+            p.overall_score = entry["overall_score"]
+            p.last_synced = datetime.datetime.utcnow()
+            
+    db.commit()
+    return db_snap
+
+

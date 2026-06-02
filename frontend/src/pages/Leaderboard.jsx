@@ -18,7 +18,8 @@ import {
   PlusCircle,
   FileText,
   Image,
-  AlertCircle
+  AlertCircle,
+  Calendar
 } from 'lucide-react';
 import { Github } from '../components/Icons';
 import { 
@@ -26,13 +27,18 @@ import {
   getMyGamification, 
   getContests, 
   submitPointClaim, 
-  getMyClaims 
+  getMyClaims,
+  getCodingProfiles,
+  getCommitteeLeaderboard
 } from '../utils/api';
 
 export default function Leaderboard() {
   const [activeTab, setActiveTab] = useState('ranking'); // 'ranking', 'contests', 'achievements'
   const [timeframe, setTimeframe] = useState('all_time'); // 'all_time', 'weekly', 'monthly'
+  const [rankingType, setRankingType] = useState('points'); // 'points' or 'coding'
   const [leaderboard, setLeaderboard] = useState([]);
+  const [codingProfiles, setCodingProfiles] = useState([]);
+  const [committeeLeaderboard, setCommitteeLeaderboard] = useState([]);
   const [contests, setContests] = useState([]);
   const [myGamification, setMyGamification] = useState(null);
   const [myClaims, setMyClaims] = useState([]);
@@ -143,9 +149,22 @@ export default function Leaderboard() {
       if (activeTab === 'ranking') {
         const lbData = await getLeaderboard(timeframe);
         setLeaderboard(lbData);
+        try {
+          const profiles = await getCodingProfiles();
+          setCodingProfiles(profiles);
+        } catch (pErr) {
+          console.error("Failed to fetch coding profiles", pErr);
+        }
       } else if (activeTab === 'contests') {
         const cData = await getContests();
         setContests(cData);
+      } else if (activeTab === 'committee-coding') {
+        try {
+          const committeeLb = await getCommitteeLeaderboard();
+          setCommitteeLeaderboard(committeeLb);
+        } catch (cLbErr) {
+          console.error("Failed to fetch committee leaderboard", cLbErr);
+        }
       }
 
       if (token) {
@@ -166,6 +185,12 @@ export default function Leaderboard() {
   const filteredLeaderboard = leaderboard.filter(user => 
     user.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
     (user.full_name && user.full_name.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
+
+  const filteredCommitteeLeaderboard = committeeLeaderboard.filter(p => 
+    p.user_username.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (p.user_fullname && p.user_fullname.toLowerCase().includes(searchQuery.toLowerCase())) ||
+    (p.user_position && p.user_position.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   // Divide leaderboard into podium (Top 3) and standard rows
@@ -279,6 +304,16 @@ export default function Leaderboard() {
             }`}
           >
             <Trophy size={14} /> Standings
+          </button>
+          <button
+            onClick={() => setActiveTab('committee-coding')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all duration-300 cursor-pointer ${
+              activeTab === 'committee-coding'
+                ? 'bg-emerald-400 text-slate-950 font-bold shadow-md shadow-emerald-500/20'
+                : 'text-slate-300 dark:text-slate-300 light:text-slate-700 hover:text-emerald-400 light:hover:text-emerald-600'
+            }`}
+          >
+            <Medal size={14} /> Committee Coding Leaderboard
           </button>
           <button
             onClick={() => setActiveTab('contests')}
@@ -453,26 +488,54 @@ export default function Leaderboard() {
                 
                 {/* Search Bar section & Timeframe Filters */}
                 <div className="p-4 sm:p-6 border-b border-slate-800/60 dark:border-slate-800/60 light:border-slate-200 flex flex-col md:flex-row gap-4 items-center justify-between">
-                  <h3 className="text-lg font-bold flex items-center gap-2">
-                    <Users size={18} className="text-emerald-400" /> Member Standings
-                  </h3>
-                  
-                  {/* LeetCode timeframes */}
-                  <div className="flex p-0.5 bg-slate-950 border border-slate-850 rounded-lg">
-                    {['all_time', 'weekly', 'monthly'].map((tf) => (
+                  <div className="flex flex-col items-start gap-2 text-left">
+                    <h3 className="text-lg font-bold flex items-center gap-2">
+                      <Users size={18} className="text-emerald-400" /> Member Standings
+                    </h3>
+                    
+                    {/* Dynamic Dual Standings Selector */}
+                    <div className="flex p-0.5 bg-slate-950 border border-slate-850 rounded-lg">
                       <button
-                        key={tf}
-                        onClick={() => setTimeframe(tf)}
-                        className={`px-3 py-1.5 text-[10px] sm:text-xs font-mono font-bold rounded-md transition-colors cursor-pointer ${
-                          timeframe === tf
-                            ? 'bg-emerald-400 text-slate-950'
+                        onClick={() => setRankingType('points')}
+                        className={`px-3 py-1 text-[10px] sm:text-xs font-mono font-bold rounded-md transition-colors cursor-pointer ${
+                          rankingType === 'points'
+                            ? 'bg-emerald-400 text-slate-950 shadow-sm shadow-emerald-500/10'
                             : 'text-slate-400 hover:text-emerald-400'
                         }`}
                       >
-                        {tf.replace('_', ' ').toUpperCase()}
+                        GAMIFICATION_POINTS
                       </button>
-                    ))}
+                      <button
+                        onClick={() => setRankingType('coding')}
+                        className={`px-3 py-1 text-[10px] sm:text-xs font-mono font-bold rounded-md transition-colors cursor-pointer ${
+                          rankingType === 'coding'
+                            ? 'bg-emerald-400 text-slate-950 shadow-sm shadow-emerald-500/10'
+                            : 'text-slate-400 hover:text-emerald-400'
+                        }`}
+                      >
+                        COMPETITIVE_STANDINGS
+                      </button>
+                    </div>
                   </div>
+                  
+                  {/* LeetCode timeframes */}
+                  {rankingType === 'points' && (
+                    <div className="flex p-0.5 bg-slate-950 border border-slate-850 rounded-lg">
+                      {['all_time', 'weekly', 'monthly'].map((tf) => (
+                        <button
+                          key={tf}
+                          onClick={() => setTimeframe(tf)}
+                          className={`px-3 py-1.5 text-[10px] sm:text-xs font-mono font-bold rounded-md transition-colors cursor-pointer ${
+                            timeframe === tf
+                              ? 'bg-emerald-400 text-slate-950'
+                              : 'text-slate-400 hover:text-emerald-400'
+                          }`}
+                        >
+                          {tf.replace('_', ' ').toUpperCase()}
+                        </button>
+                      ))}
+                    </div>
+                  )}
 
                   <div className="relative w-full md:w-64">
                     <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
@@ -487,9 +550,270 @@ export default function Leaderboard() {
                 </div>
 
                 {/* Table view */}
-                {filteredLeaderboard.length === 0 ? (
+                {rankingType === 'points' ? (
+                  filteredLeaderboard.length === 0 ? (
+                    <div className="py-12 text-center text-slate-500 font-mono text-sm">
+                      NO_RESULTS_FOUND_FOR_SEARCH
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="bg-slate-900/60 border-b border-slate-800/50 text-xs tracking-wider text-slate-400 font-mono">
+                            <th className="py-4 px-6 text-center w-20">RANK</th>
+                            <th className="py-4 px-6">MEMBER</th>
+                            <th className="py-4 px-6 text-center">BADGES</th>
+                            <th className="py-4 px-6 text-right w-36">POINTS ({timeframe.toUpperCase()})</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filteredLeaderboard.map((user, idx) => {
+                            const isTop3 = user.rank <= 3;
+                            const tier = getRankTier(user.points);
+                            
+                            return (
+                              <tr 
+                                key={user.id} 
+                                className={`border-b border-slate-900/60 hover:bg-slate-900/20 transition-colors group ${
+                                  token && myGamification && myGamification.rank === user.rank 
+                                    ? 'bg-emerald-400/5 border-l-4 border-l-emerald-400' 
+                                    : ''
+                                }`}
+                              >
+                                <td className="py-4 px-6 text-center font-bold">
+                                  {user.rank === 1 ? (
+                                    <span className="text-xl">🥇</span>
+                                  ) : user.rank === 2 ? (
+                                    <span className="text-xl">🥈</span>
+                                  ) : user.rank === 3 ? (
+                                    <span className="text-xl">🥉</span>
+                                  ) : (
+                                    <span className="text-slate-400 font-mono text-sm">#{user.rank}</span>
+                                  )}
+                                </td>
+                                
+                                <td className="py-4 px-6">
+                                  <div className="flex items-center gap-3">
+                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-mono font-bold text-xs uppercase ${
+                                      isTop3 ? 'bg-slate-800 text-slate-200 border border-slate-700/50' : 'bg-slate-950 text-slate-400 border border-slate-850'
+                                    }`}>
+                                      {user.username.slice(0, 2)}
+                                    </div>
+                                    <div className="flex flex-col">
+                                      <span className="font-bold text-slate-200 group-hover:text-emerald-400 transition-colors flex items-center gap-1.5">
+                                        {user.full_name || user.username}
+                                        {user.streak > 0 && (
+                                          <span className="text-orange-500 font-bold text-xs flex items-center gap-0.5" title={`${user.streak} Day Active Streak!`}>
+                                            🔥{user.streak}
+                                          </span>
+                                        )}
+                                        {token && myGamification && myGamification.rank === user.rank && (
+                                          <span className="text-[10px] bg-emerald-400/10 text-emerald-400 px-1.5 py-0.5 rounded font-mono font-semibold">YOU</span>
+                                        )}
+                                      </span>
+                                      <span className="text-[10px] font-mono text-slate-500">@{user.username}</span>
+                                    </div>
+                                  </div>
+                                </td>
+
+                                <td className="py-4 px-6 text-center">
+                                  <div className="flex flex-wrap justify-center gap-1.5">
+                                    {user.badges && user.badges.length > 0 ? (
+                                      user.badges.map((badge, bIdx) => (
+                                        <span 
+                                          key={bIdx} 
+                                          className="inline-block text-[10px] font-semibold font-mono bg-slate-900 border border-slate-850 px-2 py-0.5 rounded-full text-slate-350"
+                                        >
+                                          {badge}
+                                        </span>
+                                      ))
+                                    ) : (
+                                      <span className="text-[10px] font-mono text-slate-650 italic">None</span>
+                                    )}
+                                  </div>
+                                </td>
+
+                                <td className="py-4 px-6 text-right">
+                                  <div className="flex flex-col items-end">
+                                    <span className="font-bold font-mono text-emerald-400 text-sm">
+                                      {user.points} PTS
+                                    </span>
+                                    <span className={`text-[10px] font-semibold ${tier.color}`}>
+                                      {tier.name.split(' ')[0]} Tier
+                                    </span>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )
+                ) : (
+                  // COMPETITIVE CODING PROFILE STANDINGS TABLE
+                  codingProfiles.filter(p => 
+                    p.user_username.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    (p.user_fullname && p.user_fullname.toLowerCase().includes(searchQuery.toLowerCase()))
+                  ).length === 0 ? (
+                    <div className="py-12 text-center text-slate-500 font-mono text-sm">
+                      NO_COMPETITIVE_PROFILES_FOUND
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="bg-slate-900/60 border-b border-slate-800/50 text-xs tracking-wider text-slate-400 font-mono">
+                            <th className="py-4 px-6 text-center w-20">RANK</th>
+                            <th className="py-4 px-6">MEMBER</th>
+                            <th className="py-4 px-6 text-center">GITHUB</th>
+                            <th className="py-4 px-6 text-center">LEETCODE</th>
+                            <th className="py-4 px-6 text-center">CODEFORCES</th>
+                            <th className="py-4 px-6 text-center">GFG</th>
+                            <th className="py-4 px-6 text-right w-36">CODING_SCORE</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {codingProfiles
+                            .filter(p => 
+                              p.user_username.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                              (p.user_fullname && p.user_fullname.toLowerCase().includes(searchQuery.toLowerCase()))
+                            )
+                            .sort((a, b) => b.coding_score - a.coding_score)
+                            .map((p, idx) => {
+                              const isTop3 = idx < 3;
+                              return (
+                                <tr key={p.id} className="border-b border-slate-900/60 hover:bg-slate-900/20 transition-colors">
+                                  <td className="py-4 px-6 text-center font-bold">
+                                    {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}`}
+                                  </td>
+                                  <td className="py-4 px-6 font-bold text-slate-200">
+                                    <div className="flex flex-col text-left">
+                                      <span>{p.user_fullname || p.user_username}</span>
+                                      <span className="text-[10px] font-mono text-slate-500">@{p.user_username}</span>
+                                    </div>
+                                  </td>
+                                  <td className="py-4 px-6 text-center font-mono text-xs text-slate-400">
+                                    {p.github_username ? (
+                                      <a href={`https://github.com/${p.github_username}`} target="_blank" rel="noreferrer" className="text-emerald-450 hover:underline">
+                                        {p.github_commits} Commits
+                                      </a>
+                                    ) : '-'}
+                                  </td>
+                                  <td className="py-4 px-6 text-center font-mono text-xs text-slate-400">
+                                    {p.leetcode_username ? (
+                                      <span>{p.leetcode_solved} Solved</span>
+                                    ) : '-'}
+                                  </td>
+                                  <td className="py-4 px-6 text-center font-mono text-xs text-slate-400">
+                                    {p.codeforces_username ? (
+                                      <span>{p.codeforces_rating} Max</span>
+                                    ) : '-'}
+                                  </td>
+                                  <td className="py-4 px-6 text-center font-mono text-xs text-slate-400">
+                                    {p.gfg_username ? (
+                                      <span>{p.gfg_solved} Solved</span>
+                                    ) : '-'}
+                                  </td>
+                                  <td className="py-4 px-6 text-right font-mono font-bold text-emerald-400">
+                                    {p.coding_score} PTS
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 4: COMMITTEE CODING LEADERBOARD */}
+          {activeTab === 'committee-coding' && (
+            <div className="space-y-8 animate-fade-in text-left max-w-5xl mx-auto">
+              
+              {/* Leaderboard Stats Section */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="glass-panel p-5 rounded-2xl flex items-center gap-3.5 bg-slate-900/30">
+                  <div className="p-3.5 bg-emerald-500/10 rounded-xl text-emerald-400 border border-emerald-500/20">
+                    <Users size={24} />
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-[10px] font-mono text-slate-500">MEMBERS TRACKED</span>
+                    <span className="text-lg font-black text-slate-100 font-mono">
+                      {filteredCommitteeLeaderboard.length} Tracked
+                    </span>
+                  </div>
+                </div>
+
+                <div className="glass-panel p-5 rounded-2xl flex items-center gap-3.5 bg-slate-900/30">
+                  <div className="p-3.5 bg-indigo-500/10 rounded-xl text-indigo-400 border border-indigo-500/20">
+                    <Trophy size={24} />
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-[10px] font-mono text-slate-500">TOP STANDING</span>
+                    <span className="text-sm font-bold text-slate-100 truncate max-w-[150px]">
+                      {filteredCommitteeLeaderboard[0] ? (filteredCommitteeLeaderboard[0].user_fullname || filteredCommitteeLeaderboard[0].user_username) : 'N/A'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="glass-panel p-5 rounded-2xl flex items-center gap-3.5 bg-slate-900/30">
+                  <div className="p-3.5 bg-emerald-400/10 rounded-xl text-emerald-400 border border-emerald-500/20 animate-pulse">
+                    <Code size={24} />
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-[10px] font-mono text-slate-500">PEAK CODING SCORE</span>
+                    <span className="text-lg font-black text-slate-100 font-mono">
+                      {filteredCommitteeLeaderboard.length > 0 ? Math.max(...filteredCommitteeLeaderboard.map(p => p.coding_score)) : 0} PTS
+                    </span>
+                  </div>
+                </div>
+
+                <div className="glass-panel p-5 rounded-2xl flex items-center gap-3.5 bg-slate-900/30">
+                  <div className="p-3.5 bg-indigo-500/10 rounded-xl text-indigo-450 border border-indigo-550/20">
+                    <Star size={24} />
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-[10px] font-mono text-slate-500">MAX COMMITS</span>
+                    <span className="text-lg font-black text-slate-100 font-mono">
+                      {filteredCommitteeLeaderboard.length > 0 ? Math.max(...filteredCommitteeLeaderboard.map(p => p.github_commits || 0)) : 0} Commits
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Committee Table Viewport */}
+              <div className="glass-panel rounded-2xl overflow-hidden">
+                
+                {/* Search Bar / Header */}
+                <div className="p-4 sm:p-6 border-b border-slate-800/60 dark:border-slate-800/60 light:border-slate-200 flex flex-col sm:flex-row gap-4 items-center justify-between">
+                  <div className="flex flex-col items-start gap-1 text-left">
+                    <h3 className="text-lg font-bold flex items-center gap-2">
+                      <Medal size={18} className="text-emerald-400 animate-pulse" /> Committee Leaderboard
+                    </h3>
+                    <p className="text-[11px] text-slate-400 font-mono">
+                      // OFFICIAL_COMMITTEE_TECHNICAL_STANDINGS
+                    </p>
+                  </div>
+
+                  <div className="relative w-full sm:w-64">
+                    <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                    <input
+                      type="text"
+                      placeholder="Search committee member..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-full pl-9 pr-4 py-2 text-sm bg-slate-950 border border-slate-800 rounded-lg focus:outline-none focus:border-emerald-500 text-slate-100 transition-colors"
+                    />
+                  </div>
+                </div>
+
+                {filteredCommitteeLeaderboard.length === 0 ? (
                   <div className="py-12 text-center text-slate-500 font-mono text-sm">
-                    NO_RESULTS_FOUND_FOR_SEARCH
+                    NO_COMMITTEE_MEMBERS_FOUND
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
@@ -497,94 +821,96 @@ export default function Leaderboard() {
                       <thead>
                         <tr className="bg-slate-900/60 border-b border-slate-800/50 text-xs tracking-wider text-slate-400 font-mono">
                           <th className="py-4 px-6 text-center w-20">RANK</th>
-                          <th className="py-4 px-6">MEMBER</th>
-                          <th className="py-4 px-6 text-center">BADGES</th>
-                          <th className="py-4 px-6 text-right w-36">POINTS ({timeframe.toUpperCase()})</th>
+                          <th className="py-4 px-6">MEMBER NAME</th>
+                          <th className="py-4 px-6 text-center">POSITION</th>
+                          <th className="py-4 px-6 text-center">CODING SCORE</th>
+                          <th className="py-4 px-6 text-center">CONTEST SCORE</th>
+                          <th className="py-4 px-6 text-center">GITHUB SCORE</th>
+                          <th className="py-4 px-6 text-right w-36">OVERALL SCORE</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {filteredLeaderboard.map((user, idx) => {
-                          const isTop3 = user.rank <= 3;
-                          const tier = getRankTier(user.points);
-                          
+                        {filteredCommitteeLeaderboard.map((member, idx) => {
+                          const isTop3 = idx < 3;
+                          const rankEmoji = idx === 0 ? '🏆' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : null;
+                          const rowHighlight = token && myGamification && myGamification.username === member.user_username;
+
                           return (
                             <tr 
-                              key={user.id} 
-                              className={`border-b border-slate-900/60 hover:bg-slate-900/20 transition-colors group ${
-                                token && myGamification && myGamification.rank === user.rank 
-                                  ? 'bg-emerald-400/5 border-l-4 border-l-emerald-400' 
-                                  : ''
+                              key={member.id} 
+                              className={`border-b border-slate-900/60 hover:bg-slate-900/30 transition-colors group ${
+                                rowHighlight ? 'bg-emerald-400/5 border-l-4 border-l-emerald-400' : ''
                               }`}
                             >
-                              {/* Rank */}
                               <td className="py-4 px-6 text-center font-bold">
-                                {user.rank === 1 ? (
-                                  <span className="text-xl">🥇</span>
-                                ) : user.rank === 2 ? (
-                                  <span className="text-xl">🥈</span>
-                                ) : user.rank === 3 ? (
-                                  <span className="text-xl">🥉</span>
+                                {rankEmoji ? (
+                                  <span className="text-xl">{rankEmoji}</span>
                                 ) : (
-                                  <span className="text-slate-400 font-mono text-sm">#{user.rank}</span>
+                                  <span className="text-slate-400 font-mono text-sm">#{idx + 1}</span>
                                 )}
                               </td>
-                              
-                              {/* Member profile */}
+
                               <td className="py-4 px-6">
                                 <div className="flex items-center gap-3">
                                   <div className={`w-10 h-10 rounded-full flex items-center justify-center font-mono font-bold text-xs uppercase ${
                                     isTop3 ? 'bg-slate-800 text-slate-200 border border-slate-700/50' : 'bg-slate-950 text-slate-400 border border-slate-850'
                                   }`}>
-                                    {user.username.slice(0, 2)}
+                                    {member.user_username.slice(0, 2)}
                                   </div>
-                                  <div className="flex flex-col">
-                                    <span className="font-bold text-slate-200 group-hover:text-emerald-400 transition-colors flex items-center gap-1.5">
-                                      {user.full_name || user.username}
-                                      
-                                      {/* Streak Indicator */}
-                                      {user.streak > 0 && (
-                                        <span className="text-orange-500 font-bold text-xs flex items-center gap-0.5" title={`${user.streak} Day Active Streak!`}>
-                                          🔥{user.streak}
-                                        </span>
-                                      )}
-                                      
-                                      {token && myGamification && myGamification.rank === user.rank && (
+                                  <div className="flex flex-col text-left">
+                                    <span className="font-bold text-slate-200 group-hover:text-emerald-400 transition-colors flex items-center gap-1.5 font-sans">
+                                      {member.user_fullname || member.user_username}
+                                      {rowHighlight && (
                                         <span className="text-[10px] bg-emerald-400/10 text-emerald-400 px-1.5 py-0.5 rounded font-mono font-semibold">YOU</span>
                                       )}
                                     </span>
-                                    <span className="text-[10px] font-mono text-slate-500">@{user.username}</span>
+                                    <span className="text-[10px] font-mono text-slate-500">@{member.user_username}</span>
                                   </div>
                                 </div>
                               </td>
 
-                              {/* Badges */}
                               <td className="py-4 px-6 text-center">
-                                <div className="flex flex-wrap justify-center gap-1.5">
-                                  {user.badges && user.badges.length > 0 ? (
-                                    user.badges.map((badge, bIdx) => (
-                                      <span 
-                                        key={bIdx} 
-                                        className="inline-block text-[10px] font-semibold font-mono bg-slate-900 border border-slate-850 px-2 py-0.5 rounded-full text-slate-350"
-                                      >
-                                        {badge}
-                                      </span>
-                                    ))
-                                  ) : (
-                                    <span className="text-[10px] font-mono text-slate-650 italic">None</span>
+                                <span className={`inline-block text-[10px] font-bold font-mono px-2.5 py-1 rounded-full ${
+                                  member.user_position.toLowerCase().includes('admin') 
+                                    ? 'bg-rose-500/10 text-rose-455 border border-rose-500/20' 
+                                    : member.user_position.toLowerCase().includes('coordinator') 
+                                    ? 'bg-amber-500/10 text-amber-455 border border-amber-500/20' 
+                                    : 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20'
+                                }`}>
+                                  {member.user_position.toUpperCase()}
+                                </span>
+                              </td>
+
+                              <td className="py-4 px-6 text-center font-mono text-xs text-slate-300">
+                                <div className="flex flex-col items-center justify-center">
+                                  <span className="font-bold">{member.coding_score} PTS</span>
+                                  <div className="flex gap-1 mt-1 text-[9px] text-slate-500">
+                                    {member.leetcode_username && <span title="LeetCode solved count">LC: {member.leetcode_solved || 0}</span>}
+                                    {member.codeforces_username && <span title="Codeforces rating">CF: {member.codeforces_rating || 0}</span>}
+                                    {member.gfg_username && <span title="GeeksforGeeks solved count">GFG: {member.gfg_solved || 0}</span>}
+                                  </div>
+                                </div>
+                              </td>
+
+                              <td className="py-4 px-6 text-center font-mono text-xs text-slate-350">
+                                {member.contest_score} PTS
+                              </td>
+
+                              <td className="py-4 px-6 text-center font-mono text-xs text-slate-350">
+                                <div className="flex flex-col items-center justify-center">
+                                  <span>{member.contribution_score} PTS</span>
+                                  {member.github_username && (
+                                    <span className="text-[9px] text-slate-550">
+                                      {member.github_commits || 0} Commits
+                                    </span>
                                   )}
                                 </div>
                               </td>
 
-                              {/* Points */}
                               <td className="py-4 px-6 text-right">
-                                <div className="flex flex-col items-end">
-                                  <span className="font-bold font-mono text-emerald-400 text-sm">
-                                    {user.points} PTS
-                                  </span>
-                                  <span className={`text-[10px] font-semibold ${tier.color}`}>
-                                    {tier.name.split(' ')[0]} Tier
-                                  </span>
-                                </div>
+                                <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-emerald-400/10 border border-emerald-500/20 text-emerald-450 text-xs font-bold font-mono shadow-md shadow-emerald-500/5">
+                                  {member.overall_score} PTS
+                                </span>
                               </td>
                             </tr>
                           );

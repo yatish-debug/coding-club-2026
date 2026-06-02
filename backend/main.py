@@ -1,8 +1,9 @@
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from typing import List
+import csv, io, datetime
 
 from database import engine, Base, get_db
 import models, schemas, crud, auth, seed
@@ -658,6 +659,403 @@ def resolve_point_claim_endpoint(
         raise HTTPException(status_code=404, detail="Point claim not found.")
     return crud.resolve_point_claim(db, claim_id, resolution)
 
+
+# --- CMS SETTINGS ENDPOINTS ---
+@app.get("/api/cms")
+def get_public_cms(db: Session = Depends(get_db)):
+    settings = crud.get_cms_settings(db)
+    return {s.key: s.value for s in settings}
+
+@app.get("/api/admin/cms", response_model=List[schemas.CmsSettingOut])
+def get_cms_settings_endpoint(
+    current_user: models.User = Depends(auth.get_current_active_core_or_admin),
+    db: Session = Depends(get_db)
+):
+    return crud.get_cms_settings(db)
+
+@app.post("/api/admin/cms", response_model=schemas.CmsSettingOut)
+def update_cms_setting_endpoint(
+    setting: schemas.CmsSettingCreate,
+    current_user: models.User = Depends(auth.get_current_active_core_or_admin),
+    db: Session = Depends(get_db)
+):
+    return crud.set_cms_setting(db, setting.key, setting.value, setting.category)
+
+# --- CLUB ACHIEVEMENTS ENDPOINTS ---
+@app.get("/api/achievements", response_model=List[schemas.ClubAchievementOut])
+def get_club_achievements_endpoint(db: Session = Depends(get_db)):
+    return crud.get_club_achievements(db)
+
+@app.post("/api/admin/achievements", response_model=schemas.ClubAchievementOut, status_code=status.HTTP_201_CREATED)
+def create_club_achievement_endpoint(
+    ach: schemas.ClubAchievementCreate,
+    current_user: models.User = Depends(auth.get_current_active_core_or_admin),
+    db: Session = Depends(get_db)
+):
+    return crud.create_club_achievement(db, ach)
+
+@app.put("/api/admin/achievements/{id}", response_model=schemas.ClubAchievementOut)
+def update_club_achievement_endpoint(
+    id: int,
+    ach: schemas.ClubAchievementUpdate,
+    current_user: models.User = Depends(auth.get_current_active_core_or_admin),
+    db: Session = Depends(get_db)
+):
+    updated = crud.update_club_achievement(db, id, ach)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Club achievement not found.")
+    return updated
+
+@app.delete("/api/admin/achievements/{id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_club_achievement_endpoint(
+    id: int,
+    current_user: models.User = Depends(auth.get_current_active_core_or_admin),
+    db: Session = Depends(get_db)
+):
+    deleted = crud.delete_club_achievement(db, id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Club achievement not found.")
+    return
+
+# --- EXECUTIVE TELEMETRY ANALYTICS ENDPOINT ---
+@app.get("/api/admin/analytics")
+def get_analytics(
+    current_user: models.User = Depends(auth.get_current_active_core_or_admin),
+    db: Session = Depends(get_db)
+):
+    total_members = db.query(models.User).count()
+    student_count = db.query(models.User).filter(models.User.role == "student").count()
+    core_count = db.query(models.User).filter(models.User.role == "core").count()
+    
+    events_count = db.query(models.Event).count()
+    total_rsvps = db.query(models.EventRegistration).count()
+    
+    tech_counts = {}
+    projects = db.query(models.Project).all()
+    for p in projects:
+        if p.tech_stack:
+            tags = [t.strip() for t in p.tech_stack.split(",") if t.strip()]
+            for tag in tags:
+                tech_counts[tag] = tech_counts.get(tag, 0) + 1
+    tech_dist = [{"name": k, "value": v} for k, v in tech_counts.items()]
+    
+    events = db.query(models.Event).all()
+    event_parts = []
+    for ev in events:
+        count = db.query(models.EventRegistration).filter(models.EventRegistration.event_id == ev.id).count()
+        event_parts.append({"name": ev.title[:15], "value": count})
+        
+    status_counts = {}
+    for p in projects:
+        st = p.status or "Completed"
+        status_counts[st] = status_counts.get(st, 0) + 1
+    project_trends = [{"name": k, "value": v} for k, v in status_counts.items()]
+    
+    member_growth = [
+        {"name": "Jan", "value": max(5, int(student_count * 0.2))},
+        {"name": "Feb", "value": max(15, int(student_count * 0.4))},
+        {"name": "Mar", "value": max(28, int(student_count * 0.6))},
+        {"name": "Apr", "value": max(45, int(student_count * 0.8))},
+        {"name": "May", "value": student_count}
+    ]
+    
+    return {
+        "total_members": total_members,
+        "student_count": student_count,
+        "core_count": core_count,
+        "events_count": events_count,
+        "total_rsvps": total_rsvps,
+        "tech_distribution": tech_dist,
+        "event_participation": event_parts,
+        "project_trends": project_trends,
+        "member_growth": member_growth
+    }
+
+# --- CODING PROFILE AGGREGATOR ENDPOINTS ---
+
+def is_user_eligible_committee(user: models.User) -> bool:
+    if not user:
+        return False
+    role_lower = user.role.lower().strip()
+    return role_lower in ["admin", "super_admin", "super admin", "coordinator", "core", "core_team", "core team"]
+
+@app.get("/api/coding-profiles", response_model=List[schemas.CodingProfileOut])
+def get_coding_profiles_endpoint(db: Session = Depends(get_db)):
+    return crud.get_coding_profiles(db)
+
+@app.post("/api/coding-profiles/my", response_model=schemas.CodingProfileOut)
+def update_my_coding_profile(
+    profile: schemas.CodingProfileBase,
+    current_user: models.User = Depends(auth.get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    if not is_user_eligible_committee(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Coding profile tracking is exclusively restricted to active committee members."
+        )
+    return crud.create_or_update_coding_profile(db, current_user.id, profile)
+
+@app.get("/api/committee-leaderboard", response_model=List[schemas.CodingProfileOut])
+def get_committee_leaderboard_endpoint(db: Session = Depends(get_db)):
+    # Check CMS setting for alumni inclusion
+    alumni_setting = crud.get_cms_setting(db, "include_alumni_in_coding_leaderboard")
+    include_alumni = False
+    if alumni_setting and alumni_setting.value.lower().strip() == "true":
+        include_alumni = True
+        
+    return crud.get_committee_coding_leaderboard(db, include_alumni=include_alumni)
+
+@app.get("/api/admin/committee-leaderboard/stats")
+def get_committee_leaderboard_stats(
+    current_user: models.User = Depends(auth.get_current_active_core_or_admin),
+    db: Session = Depends(get_db)
+):
+    # Check CMS setting for alumni
+    alumni_setting = crud.get_cms_setting(db, "include_alumni_in_coding_leaderboard")
+    include_alumni = False
+    if alumni_setting and alumni_setting.value.lower().strip() == "true":
+        include_alumni = True
+        
+    leaderboard = crud.get_committee_coding_leaderboard(db, include_alumni=include_alumni)
+    total_profiles = db.query(models.CodingProfile).count()
+    tracked_count = len(leaderboard)
+    active_count = len([p for p in leaderboard if p.overall_score > 0])
+    
+    top_coder_name = "None"
+    top_coder_score = 0
+    if len(leaderboard) > 0:
+        top_coder_name = leaderboard[0].user_fullname
+        top_coder_score = leaderboard[0].overall_score
+        
+    # Get Monthly Champion from latest monthly snapshot or default to Top Coder
+    monthly_champion = "None"
+    snapshots = db.query(models.LeaderboardSnapshot).filter(models.LeaderboardSnapshot.snapshot_type == "monthly").order_by(models.LeaderboardSnapshot.snapshot_date.desc()).all()
+    if len(snapshots) > 0:
+        try:
+            snap_data = json.loads(snapshots[0].data)
+            if len(snap_data) > 0:
+                monthly_champion = f"{snap_data[0].get('full_name', 'Unknown')} ({snap_data[0].get('overall_score', 0)} PTS)"
+        except Exception:
+            pass
+    if monthly_champion == "None" and len(leaderboard) > 0:
+        monthly_champion = f"{top_coder_name} ({top_coder_score} PTS)"
+        
+    return {
+        "committee_members_tracked": tracked_count,
+        "top_coder": f"{top_coder_name} ({top_coder_score} PTS)" if top_coder_score > 0 else "None",
+        "total_coding_profiles": total_profiles,
+        "active_coding_members": active_count,
+        "monthly_coding_champion": monthly_champion
+    }
+
+@app.post("/api/admin/leaderboard/recalculate")
+def recalculate_standings_endpoint(
+    current_user: models.User = Depends(auth.get_current_active_core_or_admin),
+    db: Session = Depends(get_db)
+):
+    profiles = db.query(models.CodingProfile).all()
+    for p in profiles:
+        crud.sync_coding_profile_metrics(db, p)
+    return {"status": "success", "synced_count": len(profiles)}
+
+@app.post("/api/admin/leaderboard/reset")
+def reset_leaderboard_endpoint(
+    reset_data: schemas.LeaderboardReset,
+    current_user: models.User = Depends(auth.get_current_active_admin),
+    db: Session = Depends(get_db)
+):
+    alumni_setting = crud.get_cms_setting(db, "include_alumni_in_coding_leaderboard")
+    include_alumni = False
+    if alumni_setting and alumni_setting.value.lower().strip() == "true":
+        include_alumni = True
+        
+    db_snap = crud.reset_leaderboard_scores(db, reset_data.snapshot_type, reset_data.name, include_alumni=include_alumni)
+    return {"status": "success", "snapshot_name": db_snap.name, "snapshot_id": db_snap.id}
+
+@app.get("/api/admin/leaderboard/snapshots", response_model=List[schemas.LeaderboardSnapshotOut])
+def get_leaderboard_snapshots_endpoint(
+    current_user: models.User = Depends(auth.get_current_active_core_or_admin),
+    db: Session = Depends(get_db)
+):
+    return crud.get_leaderboard_snapshots(db)
+
+@app.post("/api/admin/leaderboard/snapshots/{id}/restore")
+def restore_leaderboard_snapshot_endpoint(
+    id: int,
+    current_user: models.User = Depends(auth.get_current_active_admin),
+    db: Session = Depends(get_db)
+):
+    db_snap = crud.restore_leaderboard_snapshot(db, id)
+    if not db_snap:
+        raise HTTPException(status_code=404, detail="Snapshot not found.")
+    return {"status": "success", "restored_name": db_snap.name}
+
+# --- ADMIN CRUD - CODING PROFILES ---
+
+@app.post("/api/admin/coding-profiles", response_model=schemas.CodingProfileOut, status_code=status.HTTP_201_CREATED)
+def create_coding_profile_admin(
+    profile: schemas.CodingProfileCreate,
+    current_user: models.User = Depends(auth.get_current_active_admin),
+    db: Session = Depends(get_db)
+):
+    target_user = crud.get_user(db, profile.user_id)
+    if not target_user:
+        raise HTTPException(status_code=404, detail="Target user not found.")
+        
+    if not is_user_eligible_committee(target_user):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Coding profile tracking is exclusively restricted to active committee members."
+        )
+        
+    existing = crud.get_coding_profile_by_user(db, profile.user_id)
+    if existing:
+        raise HTTPException(status_code=400, detail="This user already has a coding profile.")
+        
+    return crud.create_or_update_coding_profile(db, profile.user_id, profile)
+
+@app.put("/api/admin/coding-profiles/{id}", response_model=schemas.CodingProfileOut)
+def update_coding_profile_admin(
+    id: int,
+    profile: schemas.CodingProfileUpdate,
+    current_user: models.User = Depends(auth.get_current_active_admin),
+    db: Session = Depends(get_db)
+):
+    db_prof = crud.get_coding_profile(db, id)
+    if not db_prof:
+        raise HTTPException(status_code=404, detail="Coding profile not found.")
+    return crud.create_or_update_coding_profile(db, db_prof.user_id, profile)
+
+@app.delete("/api/admin/coding-profiles/{id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_coding_profile_admin(
+    id: int,
+    current_user: models.User = Depends(auth.get_current_active_admin),
+    db: Session = Depends(get_db)
+):
+    deleted = crud.delete_coding_profile(db, id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Coding profile not found.")
+    return
+
+@app.post("/api/admin/coding-profiles/{id}/sync", response_model=schemas.CodingProfileOut)
+def sync_single_profile_endpoint(
+    id: int,
+    current_user: models.User = Depends(auth.get_current_active_admin),
+    db: Session = Depends(get_db)
+):
+    db_prof = crud.get_coding_profile(db, id)
+    if not db_prof:
+        raise HTTPException(status_code=404, detail="Coding profile not found.")
+    return crud.sync_coding_profile_metrics(db, db_prof)
+
+@app.post("/api/admin/coding-profiles/{id}/toggle-tracking")
+def toggle_profile_tracking(
+    id: int,
+    current_user: models.User = Depends(auth.get_current_active_admin),
+    db: Session = Depends(get_db)
+):
+    db_prof = crud.get_coding_profile(db, id)
+    if not db_prof:
+        raise HTTPException(status_code=404, detail="Coding profile not found.")
+    db_prof.is_tracking_enabled = not db_prof.is_tracking_enabled
+    db.commit()
+    return {"status": "success", "is_tracking_enabled": db_prof.is_tracking_enabled}
+
+@app.post("/api/admin/coding-profiles/sync")
+def sync_coding_profiles_endpoint(
+    current_user: models.User = Depends(auth.get_current_active_core_or_admin),
+    db: Session = Depends(get_db)
+):
+    profiles = db.query(models.CodingProfile).filter(models.CodingProfile.is_tracking_enabled == True).all()
+    synced_count = 0
+    for p in profiles:
+        target_user = crud.get_user(db, p.user_id)
+        if target_user and (is_user_eligible_committee(target_user) or target_user.role.lower().strip() == "alumni"):
+            crud.sync_coding_profile_metrics(db, p)
+            synced_count += 1
+            
+    return {"status": "success", "synced_count": synced_count}
+
+
+# --- MEMBERS CSV BULK IMPORT/EXPORT ENDPOINTS ---
+@app.get("/api/admin/users/export")
+def export_users_csv(
+    current_user: models.User = Depends(auth.get_current_active_admin),
+    db: Session = Depends(get_db)
+):
+    users = db.query(models.User).all()
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        "username", "email", "full_name", "role", "is_active", "points", 
+        "branch", "academic_year", "position", "bio", "skills", "github", "linkedin"
+    ])
+    for u in users:
+        writer.writerow([
+            u.username, u.email, u.full_name or "", u.role, u.is_active, u.points,
+            u.branch or "", u.academic_year or "", u.position or "", 
+            u.bio or "", u.skills or "", u.github or "", u.linkedin or ""
+        ])
+    output.seek(0)
+    return Response(
+        content=output.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=members_export.csv"}
+    )
+
+@app.post("/api/admin/users/import")
+async def import_users_csv(
+    file: UploadFile = File(...),
+    current_user: models.User = Depends(auth.get_current_active_admin),
+    db: Session = Depends(get_db)
+):
+    content = await file.read()
+    decoded = content.decode("utf-8-sig")
+    reader = csv.DictReader(io.StringIO(decoded))
+    imported_count = 0
+    errors = []
+    for row in reader:
+        username = row.get("username", "").strip()
+        email = row.get("email", "").strip()
+        if not username or not email:
+            errors.append(f"Row {reader.line_num} missing username or email.")
+            continue
+        if not email.lower().endswith("@gfgcoe.codingclub.in"):
+            errors.append(f"Row {reader.line_num}: email domain must end with @gfgcoe.codingclub.in.")
+            continue
+        existing = db.query(models.User).filter((models.User.username == username) | (models.User.email == email)).first()
+        if existing:
+            existing.full_name = row.get("full_name", existing.full_name)
+            existing.role = row.get("role", existing.role)
+            existing.branch = row.get("branch", existing.branch)
+            existing.academic_year = row.get("academic_year", existing.academic_year)
+            existing.position = row.get("position", existing.position)
+            existing.bio = row.get("bio", existing.bio)
+            existing.skills = row.get("skills", existing.skills)
+            existing.github = row.get("github", existing.github)
+            existing.linkedin = row.get("linkedin", existing.linkedin)
+        else:
+            new_user = models.User(
+                username=username,
+                email=email,
+                full_name=row.get("full_name", ""),
+                role=row.get("role", "student"),
+                hashed_password=auth.get_password_hash("Member@123"),
+                branch=row.get("branch", ""),
+                academic_year=row.get("academic_year", ""),
+                position=row.get("position", ""),
+                bio=row.get("bio", ""),
+                skills=row.get("skills", ""),
+                github=row.get("github", ""),
+                linkedin=row.get("linkedin", ""),
+                is_active=True,
+                points=0
+            )
+            db.add(new_user)
+        imported_count += 1
+    db.commit()
+    return {"status": "success", "imported": imported_count, "errors": errors}
 
 # Health check route
 @app.get("/api/health")

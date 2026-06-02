@@ -3,9 +3,10 @@ import { Link } from 'react-router-dom';
 import { Terminal, Users, Calendar, Award, Code, ArrowRight, ExternalLink, Megaphone, Pin } from 'lucide-react';
 import CodeWindow from '../components/CodeWindow';
 import GlowingCard from '../components/GlowingCard';
-import { getEvents, getAnnouncements } from '../utils/api';
+import { getEvents, getAnnouncements, getPublicCms } from '../utils/api';
 
 export default function Home() {
+  const [cms, setCms] = useState({});
   const [upcomingEvents, setUpcomingEvents] = useState([]);
   const [announcements, setAnnouncements] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -13,6 +14,14 @@ export default function Home() {
   useEffect(() => {
     async function loadData() {
       try {
+        // Load dynamic CMS
+        try {
+          const cmsData = await getPublicCms();
+          setCms(cmsData);
+        } catch (cmsErr) {
+          console.error('Failed to load CMS settings', cmsErr);
+        }
+
         // Load events
         const eventsData = await getEvents();
         const now = new Date();
@@ -34,10 +43,10 @@ export default function Home() {
   }, []);
 
   const stats = [
-    { label: 'Active Coders', count: '500+', icon: <Users className="text-emerald-400" size={24} /> },
-    { label: 'Events Completed', count: '50+', icon: <Calendar className="text-indigo-400" size={24} /> },
-    { label: 'Projects Engineered', count: '20+', icon: <Code className="text-blue-400" size={24} /> },
-    { label: 'Hackathons Won', count: '15+', icon: <Award className="text-amber-400" size={24} /> },
+    { label: 'Active Coders', count: cms.stat_members || '500+', icon: <Users className="text-emerald-400" size={24} /> },
+    { label: 'Events Completed', count: cms.stat_events || '50+', icon: <Calendar className="text-indigo-400" size={24} /> },
+    { label: 'Projects Engineered', count: cms.stat_projects || '20+', icon: <Code className="text-blue-400" size={24} /> },
+    { label: 'Hackathons Won', count: cms.stat_wins || '15+', icon: <Award className="text-amber-400" size={24} /> },
   ];
 
   return (
@@ -58,11 +67,23 @@ export default function Home() {
                 <Terminal size={14} /> GFGCOE_Coding_Club.init()
               </div>
               <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight leading-tight">
-                Empowering College <br />
-                <span className="text-gradient">Minds to Code</span> & Innovate
+                {cms.hero_title ? (
+                  cms.hero_title.includes("to Code") ? (
+                    <>
+                      {cms.hero_title.split("to Code")[0]}
+                      <span className="text-gradient">to Code</span>
+                      {cms.hero_title.split("to Code")[1]}
+                    </>
+                  ) : cms.hero_title
+                ) : (
+                  <>
+                    Empowering College <br />
+                    <span className="text-gradient">Minds to Code</span> & Innovate
+                  </>
+                )}
               </h1>
               <p className="text-lg text-slate-400 max-w-2xl mx-auto lg:mx-0">
-                Welcome to the premier student developers community of GFGCOE. We organize hackathons, coordinate open source campaigns, solve DSA sheets, and engineer high-quality full-stack applications.
+                {cms.hero_subtitle || "Welcome to the premier student developers community of GFGCOE. We organize hackathons, coordinate open source campaigns, solve DSA sheets, and engineer high-quality full-stack applications."}
               </p>
               
               {/* Call-to-actions */}

@@ -16,6 +16,16 @@ class User(Base):
     # Student Member specifics
     points = Column(Integer, default=0) # Leaderboard points
     certificates = Column(String, nullable=True) # Comma-separated certificate lists
+    
+    # Extended Member specifics
+    branch = Column(String, nullable=True)
+    academic_year = Column(String, nullable=True)
+    position = Column(String, nullable=True)
+    bio = Column(Text, nullable=True)
+    skills = Column(String, nullable=True)
+    github = Column(String, nullable=True)
+    linkedin = Column(String, nullable=True)
+    profile_photo = Column(String, nullable=True)
 
 class Event(Base):
     __tablename__ = "events"
@@ -28,6 +38,8 @@ class Event(Base):
     image_url = Column(String, nullable=True)
     registration_link = Column(String, nullable=True)
     category = Column(String, default="Workshop") # "Workshop", "Hackathon", "Seminar", "Coding Contest"
+    status = Column(String, default="Upcoming") # "Upcoming", "Open", "Ongoing", "Completed", "Archived"
+    attendance_count = Column(Integer, default=0)
 
 class Project(Base):
     __tablename__ = "projects"
@@ -42,6 +54,11 @@ class Project(Base):
     
     # Trace student submissions vs admin-added
     submitted_by = Column(String, nullable=True) # Email of the student
+    team_members = Column(Text, nullable=True) # comma-separated list of team members
+    start_date = Column(DateTime, nullable=True, default=datetime.datetime.utcnow)
+    end_date = Column(DateTime, nullable=True, default=datetime.datetime.utcnow)
+    completion_percentage = Column(Integer, default=100)
+    status = Column(String, default="Completed") # "Planning", "Development", "Testing", "Review", "Completed", "Deployed"
 
 class Committee(Base):
     __tablename__ = "committee"
@@ -177,3 +194,58 @@ class Achievement(Base):
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     achievement_id = Column(String, nullable=False)
     unlocked_at = Column(DateTime, nullable=False, default=datetime.datetime.utcnow)
+
+class CmsSetting(Base):
+    __tablename__ = "cms_settings"
+    
+    key = Column(String, primary_key=True, index=True)
+    value = Column(Text, nullable=False)
+    category = Column(String, nullable=False)
+
+class ClubAchievement(Base):
+    __tablename__ = "club_achievements"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String, index=True, nullable=False)
+    description = Column(Text, nullable=False)
+    category = Column(String, nullable=False) # e.g. "Hackathons", "Coding Competitions", "Research Publications", "Certifications", "Awards", "Community Contributions"
+    date = Column(DateTime, nullable=False, default=datetime.datetime.utcnow)
+    achieved_by = Column(String, nullable=False)
+    link = Column(String, nullable=True)
+    image_url = Column(String, nullable=True)
+
+class CodingProfile(Base):
+    __tablename__ = "coding_profiles"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), unique=True, nullable=False)
+    github_username = Column(String, nullable=True)
+    codeforces_username = Column(String, nullable=True)
+    leetcode_username = Column(String, nullable=True)
+    gfg_username = Column(String, nullable=True)
+    hackerrank_username = Column(String, nullable=True)
+    coding_score = Column(Integer, default=0)
+    problems_solved = Column(Integer, default=0)
+    codeforces_rating = Column(Integer, default=0)
+    leetcode_solved = Column(Integer, default=0)
+    gfg_solved = Column(Integer, default=0)
+    github_commits = Column(Integer, default=0)
+    
+    # New score metrics
+    contest_score = Column(Integer, default=0)
+    contribution_score = Column(Integer, default=0)
+    activity_score = Column(Integer, default=0)
+    overall_score = Column(Integer, default=0)
+    is_tracking_enabled = Column(Boolean, default=True)
+    
+    last_synced = Column(DateTime, nullable=False, default=datetime.datetime.utcnow)
+
+class LeaderboardSnapshot(Base):
+    __tablename__ = "leaderboard_snapshots"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    snapshot_type = Column(String, nullable=False)  # "monthly", "semester", "annual", "archive"
+    snapshot_date = Column(DateTime, nullable=False, default=datetime.datetime.utcnow)
+    name = Column(String, nullable=False)
+    data = Column(Text, nullable=False)  # JSON-serialized list of ranked committee entries
+

@@ -111,73 +111,122 @@ export default function Projects() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {filteredProjects.map((project) => (
-            <GlowingCard key={project.id} hoverGlow="indigo" className="flex flex-col justify-between h-full min-h-[360px]">
-              <div className="space-y-4">
-                {project.image_url && (
-                  <div className="w-full h-44 rounded-xl overflow-hidden border border-slate-800/40 shrink-0">
-                    <img
-                      src={project.image_url}
-                      alt={project.title}
-                      className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
-                    />
+          {filteredProjects.map((project) => {
+            const getStatusColor = (st) => {
+              const s = st ? st.toLowerCase() : "completed";
+              if (s === "planning") return "bg-blue-500/10 border-blue-500/20 text-blue-400";
+              if (s === "development") return "bg-amber-500/10 border-amber-500/20 text-amber-400";
+              if (s === "testing") return "bg-purple-500/10 border-purple-500/20 text-purple-400";
+              if (s === "review") return "bg-pink-500/10 border-pink-500/20 text-pink-400";
+              if (s === "deployed") return "bg-teal-500/10 border-teal-500/20 text-teal-450";
+              return "bg-emerald-500/10 border-emerald-500/20 text-emerald-450";
+            };
+
+            return (
+              <GlowingCard key={project.id} hoverGlow="indigo" className="flex flex-col justify-between h-full min-h-[420px] relative">
+                <div className="space-y-4">
+                  {project.image_url && (
+                    <div className="w-full h-44 rounded-xl overflow-hidden border border-slate-800/40 shrink-0 relative">
+                      <img
+                        src={project.image_url}
+                        alt={project.title}
+                        className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
+                      />
+                      <span className={`absolute top-2 right-2 px-2 py-0.5 rounded text-[9px] font-mono font-bold tracking-wider uppercase border shadow-md ${getStatusColor(project.status)}`}>
+                        {project.status || "Completed"}
+                      </span>
+                    </div>
+                  )}
+                  
+                  <div className="space-y-2 text-left">
+                    <div className="flex justify-between items-center">
+                      <h3 className="text-xl font-bold tracking-tight text-slate-100 line-clamp-1">
+                        {project.title}
+                      </h3>
+                      {!project.image_url && (
+                        <span className={`px-2 py-0.5 rounded text-[9px] font-mono font-bold tracking-wider uppercase border ${getStatusColor(project.status)}`}>
+                          {project.status || "Completed"}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-sm text-slate-400 leading-relaxed line-clamp-3">
+                      {project.description}
+                    </p>
                   </div>
-                )}
-                
-                <div className="space-y-2">
-                  <h3 className="text-xl font-bold tracking-tight text-slate-100">
-                    {project.title}
-                  </h3>
-                  <p className="text-sm text-slate-400 leading-relaxed line-clamp-3">
-                    {project.description}
-                  </p>
-                </div>
-              </div>
-
-              <div className="space-y-4 mt-6">
-                {/* Tech stack splitted badges */}
-                <div className="flex flex-wrap gap-1.5 pt-4 border-t border-slate-900/60">
-                  {project.tech_stack.split(',').map((tech, idx) => (
-                    <span
-                      key={idx}
-                      className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400 text-[10px] font-mono"
-                    >
-                      {tech.trim()}
-                    </span>
-                  ))}
                 </div>
 
-                {/* External repository link hooks */}
-                <div className="flex justify-between items-center text-xs font-mono">
-                  {project.github_link ? (
-                    <a
-                      href={project.github_link}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-slate-400 hover:text-emerald-400 flex items-center gap-1 cursor-pointer"
-                    >
-                      <Github size={14} /> REPOSITORY_
-                    </a>
-                  ) : (
-                    <span className="text-slate-600">NO_REPO_LINK</span>
+                <div className="space-y-4 mt-6">
+                  {/* Completion percentage slider/indicator */}
+                  {project.completion_percentage !== undefined && (
+                    <div className="space-y-1 text-left">
+                      <div className="flex justify-between text-[10px] font-mono text-slate-500">
+                        <span>STAGE_COMPLETION_</span>
+                        <span className="text-indigo-400 font-bold">{project.completion_percentage}%</span>
+                      </div>
+                      <div className="w-full h-1 bg-slate-900 rounded-full overflow-hidden">
+                        <div className="h-full bg-indigo-500 rounded-full transition-all duration-500" style={{ width: `${project.completion_percentage}%` }}></div>
+                      </div>
+                    </div>
                   )}
 
-                  {project.live_link ? (
-                    <a
-                      href={project.live_link}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-emerald-400 hover:text-emerald-300 flex items-center gap-1 cursor-pointer"
-                    >
-                      LIVE_DEPLOY_ <ExternalLink size={12} />
-                    </a>
-                  ) : (
-                    <span className="text-slate-600">STAGING_ONLY</span>
+                  {/* Team Members credit */}
+                  {project.team_members && (
+                    <div className="text-[11px] font-mono text-slate-450 text-left truncate" title={project.team_members}>
+                      <span className="text-slate-500">ROSTER:</span> {project.team_members}
+                    </div>
                   )}
+
+                  {/* Start/End Timelines */}
+                  {project.start_date && (
+                    <div className="text-[9px] font-mono text-slate-500 text-left">
+                      TIMELINE: {new Date(project.start_date).toLocaleDateString()} - {project.end_date ? new Date(project.end_date).toLocaleDateString() : 'Active'}
+                    </div>
+                  )}
+
+                  {/* Tech stack splitted badges */}
+                  <div className="flex flex-wrap gap-1.5 pt-4 border-t border-slate-900/60">
+                    {project.tech_stack.split(',').map((tech, idx) => (
+                      <span
+                        key={idx}
+                        className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-450 text-[10px] font-mono"
+                      >
+                        {tech.trim()}
+                      </span>
+                    ))}
+                  </div>
+
+                  {/* External repository link hooks */}
+                  <div className="flex justify-between items-center text-xs font-mono">
+                    {project.github_link ? (
+                      <a
+                        href={project.github_link}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-slate-400 hover:text-emerald-400 flex items-center gap-1 cursor-pointer"
+                      >
+                        <Github size={14} /> REPOSITORY_
+                      </a>
+                    ) : (
+                      <span className="text-slate-650">NO_REPO_LINK</span>
+                    )}
+
+                    {project.live_link ? (
+                      <a
+                        href={project.live_link}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-emerald-400 hover:text-emerald-300 flex items-center gap-1 cursor-pointer"
+                      >
+                        LIVE_DEPLOY_ <ExternalLink size={12} />
+                      </a>
+                    ) : (
+                      <span className="text-slate-650">STAGING_ONLY</span>
+                    )}
+                  </div>
                 </div>
-              </div>
-            </GlowingCard>
-          ))}
+              </GlowingCard>
+            );
+          })}
         </div>
       )}
     </div>

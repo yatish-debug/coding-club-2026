@@ -300,6 +300,82 @@ def seed_data(db: Session):
             db.commit()
             print("Student mock event RSVP seeded.")
 
+    # 8. Seed CMS settings if empty
+    if db.query(models.CmsSetting).count() == 0:
+        cms_entries = [
+            models.CmsSetting(key="hero_title", value="Empowering College Minds to Code & Innovate", category="hero"),
+            models.CmsSetting(key="hero_subtitle", value="Welcome to the premier student developers community of GFGCOE. We organize hackathons, coordinate open source campaigns, solve DSA sheets, and engineer high-quality full-stack applications.", category="hero"),
+            models.CmsSetting(key="about_mission", value="Our mission is to establish a vibrant ecosystem that cultivates logical critical thinking and hands-on coding proficiency among young developers.", category="about"),
+            models.CmsSetting(key="about_vision", value="We envision GFGCOE as a powerhouse of technological innovation, where every student engineer possesses the tools and guidance to build world-class code assets.", category="about"),
+            models.CmsSetting(key="about_story", value="Established in 2025, the Coding Club of Godavari Foundations Godavari College Of Engineering (GFGCOE), Jalgaon was founded with a singular aim: to bridge the gap between academic theory and active software industry requirements.", category="about"),
+            models.CmsSetting(key="sponsors", value="Godavari Foundations, Supabase, Vercel, GitHub Education, GeeksforGeeks", category="sponsors"),
+            models.CmsSetting(key="footer_text", value="© 2026 GFGCOE Coding Club. Engineered with passion by the computer science cohorts.", category="footer"),
+            models.CmsSetting(key="contact_email", value="codingclub@gfgcoe.org", category="contact"),
+            models.CmsSetting(key="contact_phone", value="+91 98765 43210", category="contact"),
+            models.CmsSetting(key="stat_members", value="500+", category="statistics"),
+            models.CmsSetting(key="stat_events", value="50+", category="statistics"),
+            models.CmsSetting(key="stat_projects", value="20+", category="statistics"),
+            models.CmsSetting(key="stat_wins", value="15+", category="statistics"),
+            models.CmsSetting(key="include_alumni_in_coding_leaderboard", value="false", category="leaderboard"),
+        ]
+        db.add_all(cms_entries)
+        db.commit()
+        print("CMS settings seeded.")
+
+    # 9. Seed Club Achievements if empty
+    if db.query(models.ClubAchievement).count() == 0:
+        achievements = [
+            models.ClubAchievement(
+                title="First Place - Godavari Smart Hackathon 2025",
+                description="Team Alpha won the top prize of INR 25,000 for their sandboxed code execution framework built in 24 hours.",
+                category="Hackathons",
+                achieved_by="Siddharth Mehta, Amit Patel, Rohan Deshmukh",
+                link="https://hackathon.example.com",
+                image_url="https://images.unsplash.com/photo-1504384308090-c894fdcc538d?auto=format&fit=crop&q=80&w=300"
+            ),
+            models.ClubAchievement(
+                title="Google Summer of Code Selection",
+                description="Amit Patel has been selected for GSoC 2025 to work on open-source web frameworks for educational tooling.",
+                category="Community Contributions",
+                achieved_by="Amit Patel",
+                link="https://summerofcode.withgoogle.com",
+                image_url="https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&q=80&w=300"
+            ),
+            models.ClubAchievement(
+                title="AWS Certified Solutions Architect",
+                description="Successfully cracked the AWS solutions architect exam with a score of 910/1000, establishing senior credentials.",
+                category="Certifications",
+                achieved_by="Ananya Iyer",
+                link="https://aws.amazon.com",
+                image_url="https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&q=80&w=300"
+            ),
+        ]
+        db.add_all(achievements)
+        db.commit()
+        print("Club achievements seeded.")
+
+    # 10. Seed Coding Profiles if empty
+    if db.query(models.CodingProfile).count() == 0:
+        students = db.query(models.User).filter(models.User.role == "student").all()
+        for idx, student in enumerate(students):
+            prof = models.CodingProfile(
+                user_id=student.id,
+                github_username=f"{student.username}_gh",
+                codeforces_username=f"{student.username}_cf",
+                leetcode_username=f"{student.username}_lc",
+                gfg_username=f"{student.username}_gfg",
+                hackerrank_username=f"{student.username}_hr",
+                github_commits=45 + idx * 12,
+                leetcode_solved=85 + idx * 15,
+                codeforces_rating=1200 + idx * 110,
+                gfg_solved=60 + idx * 8,
+                problems_solved=145 + idx * 23,
+                coding_score=3400 + idx * 450
+            )
+            db.add(prof)
+        db.commit()
+        print("Coding profiles seeded.")
+
 if __name__ == "__main__":
     db = SessionLocal()
     seed_data(db)

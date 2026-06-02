@@ -30,14 +30,20 @@ export default function Committee() {
     if (roleLower.includes('faculty') || roleLower.includes('advisor')) {
       return { id: 'faculty', label: 'Faculty Coordinator', color: 'emerald', icon: <Shield size={16} className="text-emerald-400" /> };
     }
-    if (roleLower === 'president' || roleLower.includes('vice president')) {
+    if (roleLower === 'president' || roleLower.includes('vice president') || roleLower === 'super admin' || roleLower === 'super_admin' || roleLower === 'admin') {
       return { id: 'exec', label: 'Executive Board', color: 'indigo', icon: <Award size={16} className="text-indigo-400" /> };
     }
     if (roleLower.includes('technical lead') || roleLower.includes('tech lead') || roleLower.includes('web architect')) {
       return { id: 'tech', label: 'Technical Lead', color: 'blue', icon: <Code size={16} className="text-blue-400" /> };
     }
-    if (roleLower.includes('event coordinator') || roleLower.includes('event')) {
+    if (roleLower.includes('event coordinator') || roleLower.includes('event') || roleLower === 'coordinator') {
       return { id: 'event', label: 'Event Coordinator', color: 'rose', icon: <Calendar size={16} className="text-rose-400" /> };
+    }
+    if (roleLower === 'alumni') {
+      return { id: 'core', label: 'Club Alumni', color: 'slate', icon: <Users size={16} className="text-slate-400" /> };
+    }
+    if (roleLower === 'member') {
+      return { id: 'core', label: 'Active Club Member', color: 'teal', icon: <Users size={16} className="text-teal-400" /> };
     }
     return { id: 'core', label: 'Core Team Member', color: 'amber', icon: <Users size={16} className="text-amber-400" /> };
   };
